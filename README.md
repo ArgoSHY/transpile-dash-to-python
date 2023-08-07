@@ -42,9 +42,9 @@ As mentioned before, the tool is a work in progress and may not fully cover all 
     cat <file
     ```
 3. Logical operators `&&` and `||`.
-4. test case of -o and so on
-5. case
-6. most of the globbing
+4. `test` case of `-o` and so on
+5. `case`
+6. most of the globbing like `?.sh`
 7. others
 
 ## Contributing
