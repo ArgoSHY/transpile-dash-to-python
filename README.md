@@ -1,4 +1,4 @@
-DO NOT USE THIS CODE IN ANY SITUATIONS THAT VIOLATE ACADEMIC INTEGRITY. ANY MISUSE WILL BE AT YOUR OWN RISK. transpile-dash-to-python
+transpile-dash-to-python
 
 ## Description
 `transpile-dash-to-python` is a Python script that helps you transpile shell-like commands to Python code. It is a simple utility that converts commands written in the shell scripting syntax to equivalent Python code. However, please note that the tool is not yet complete and may not handle all shell commands or edge cases. It currently supports basic functionality but still lacks some features.
