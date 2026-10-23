@@ -1,0 +1,39 @@
+[project]
+name = "transpile-dash-to-python"
+version = "2.0.0"
+description = "A small, grammar-driven dash-to-Python transpiler"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "ArgoSHY" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Compilers",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "ruff>=0.13",
+]
+
+# 转译器直接从仓库根目录导入即可，uv 不需要构建/安装项目本身。
+# 这样也避免了受限环境里 editable build 的临时目录清理问题。
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
