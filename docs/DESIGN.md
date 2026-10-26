@@ -97,7 +97,11 @@ Special handling:
   with no arguments) keeps an empty field.
 * `$10` is lexed as `${1}` + literal `0`, matching POSIX.
 * the `${...}` operators `:-`, `-`, `:=`, `=`, `:+`, `+`, `:?`, `?` map to runtime helpers
-  (`_param_assign`, `_param_error`, `_is_set`).
+  (`_param_assign`, `_param_error`, `_is_set`);
+* the string-pattern operators `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`,
+  `${var/old/new}`, `${var//old/new}` map to `_param_strip()` and `_param_replace()`,
+  which use glob-style `fnmatch` patterns (quoted glob characters currently still behave as
+  patterns — a known approximation).
 
 ## 4. Code generation contract
 

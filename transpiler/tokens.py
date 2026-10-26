@@ -30,12 +30,17 @@ class LiteralSegment:
 
 @dataclass(frozen=True, slots=True)
 class ParameterSegment:
-    """``$name`` / ``${name...}`` 形式的参数展开。"""
+    """``$name`` / ``${name...}`` 形式的参数展开。
+
+    ``default`` 对 ``:-``/``:=`` 等默认值运算符表示默认值；对 ``#``/``%`` 和
+    ``/`` 系列表示要匹配的 pattern。``replacement`` 只用于 ``/`` / ``//``。
+    """
 
     name: str
     quoted: bool = False
     op: str | None = None
     default: Word | None = None
+    replacement: Word | None = None
 
 
 @dataclass(frozen=True, slots=True)

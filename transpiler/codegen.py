@@ -49,6 +49,7 @@ _BUILTINS = frozenset(
     {"echo", "cd", "exit", "read", "shift", "true", "false", ":", "pwd", "export", "unset"}
 )
 _GLOB_CHARS = "*?["
+_PATTERN_PARAM_OPS = frozenset({"#", "##", "%", "%%", "/", "//"})
 _ALL_REDIRECT_KEYS = frozenset(
     {
         "stdin_path",
@@ -615,6 +616,9 @@ class CodeGenerator:
     def _parameter_parts(self, segment: ParameterSegment) -> list[str]:
         name = segment.name
         kind = "P" if segment.quoted else "p"
+        # 模式运算优先处理，这样 ${@#x} 这类不支持的特殊参数也会走明确的报错分支。
+        if segment.op in _PATTERN_PARAM_OPS:
+            return [f"({kind!r}, {self._parameter_pattern_expr(segment)})"]
         if name == "@":
             at_kind = "at_q" if segment.quoted else "at_u"
             return [f"({at_kind!r}, _argv())"]
@@ -665,6 +669,33 @@ class CodeGenerator:
             only_if_empty = "True" if operator == ":?" else "False"
             return f"_param_error({name!r}, ({default}), {only_if_empty})"
         raise CodegenError(f"unsupported parameter operator {operator!r}", filename=self.filename)
+
+    def _parameter_pattern_expr(self, segment: ParameterSegment) -> str:
+        """生成 ${var#pat} / ${var%pat} / ${var/old/new} 系列表达式。"""
+        name = segment.name
+        if name in ("@", "*", "!"):
+            raise CodegenError(
+                f"pattern expansion is not supported for ${name}",
+                filename=self.filename,
+            )
+        operator = segment.op or ""
+        base = self._parameter_base_expr(name)
+        pattern = (
+            f"_assign({self._parts_tuple(segment.default)})"
+            if segment.default is not None
+            else '""'
+        )
+        if operator in ("#", "##", "%", "%%"):
+            direction = "prefix" if operator.startswith("#") else "suffix"
+            longest = operator in ("##", "%%")
+            return f"_param_strip({base}, ({pattern}), {direction!r}, {longest!r})"
+        replacement = (
+            f"_assign({self._parts_tuple(segment.replacement)})"
+            if segment.replacement is not None
+            else '""'
+        )
+        replace_all = operator == "//"
+        return f"_param_replace({base}, ({pattern}), ({replacement}), {replace_all!r})"
 
     def _cmdsub_expr(self, segment: CommandSubSegment) -> str:
         try:

@@ -506,3 +506,28 @@ def test_break_only_exits_inner_loop(run_shell):
 )
 def test_parameter_operators(run_shell, source, expected):
     assert run_shell(source).stdout == expected
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ('x=foobar\necho "${x#foo}"', "bar\n"),
+        ('x=foobar\necho "${x##*o}"', "bar\n"),
+        ('p=/usr/local/bin\necho "${p#*/}"', "usr/local/bin\n"),
+        ('p=/usr/local/bin\necho "${p##*/}"', "bin\n"),
+        ('f=file.tar.gz\necho "${f%.gz}"', "file.tar\n"),
+        ('f=file.tar.gz\necho "${f%%.*}"', "file\n"),
+        ('x=foobar\necho "${x%bar}"', "foo\n"),
+        ('x=foobar\necho "${x/foo/X}"', "Xbar\n"),
+        ('x=foobar\necho "${x/o/0}"', "f0obar\n"),
+        ('x=foobar\necho "${x//o/0}"', "f00bar\n"),
+        ('x=foobar\necho "${x/foo/}"', "bar\n"),
+        ('x=foobar\necho "${x#}"', "foobar\n"),
+    ],
+)
+def test_string_pattern_expansions(run_shell, source, expected):
+    assert run_shell(source).stdout == expected
+
+
+def test_pattern_expansion_on_unset_variable(run_shell):
+    assert run_shell('echo "[${missing#pre}]"').stdout == "[]\n"

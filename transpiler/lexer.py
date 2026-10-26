@@ -52,6 +52,8 @@ _WORD_STOP = " \t\r\n|&;()<>'\"\\$`"
 _NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _PARAM_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*|\d+|[@*#?$!-])")
 _DEFAULT_OPS = (":-", ":=", ":+", ":?", "-", "=", "+", "?")
+# 字符串裁剪/替换运算符；长运算符必须排在短的前面（## 在 # 前，%% 在 % 前）。
+_PATTERN_OPS = ("##", "%%", "//", "#", "%", "/")
 
 
 class Lexer:
@@ -410,7 +412,46 @@ class Lexer:
             if rest.startswith(op):
                 default_word = self._parse_default_word(rest[len(op) :], line, col)
                 return ParameterSegment(name, quoted=quoted, op=op, default=default_word)
+        for op in _PATTERN_OPS:
+            if rest.startswith(op):
+                body = rest[len(op) :]
+                if op in ("/", "//"):
+                    pattern_text, replacement_text = self._split_pattern_replacement(body)
+                    pattern = self._parse_default_word(pattern_text, line, col)
+                    replacement = self._parse_default_word(replacement_text, line, col)
+                    return ParameterSegment(
+                        name,
+                        quoted=quoted,
+                        op=op,
+                        default=pattern,
+                        replacement=replacement,
+                    )
+                pattern = self._parse_default_word(body, line, col)
+                return ParameterSegment(name, quoted=quoted, op=op, default=pattern)
         raise LexError(f"unsupported parameter expansion ${{{raw}}}", line, col, self.filename)
+
+    @staticmethod
+    def _split_pattern_replacement(text: str) -> tuple[str, str]:
+        """在第一个未被引号/反斜杠保护的 ``/`` 处切分 pattern 与 replacement。"""
+        in_single = False
+        in_double = False
+        escaped = False
+        for index, char in enumerate(text):
+            if escaped:
+                escaped = False
+                continue
+            if char == "\\":
+                escaped = True
+                continue
+            if char == "'" and not in_double:
+                in_single = not in_single
+                continue
+            if char == '"' and not in_single:
+                in_double = not in_double
+                continue
+            if char == "/" and not in_single and not in_double:
+                return text[:index], text[index + 1 :]
+        return text, ""
 
     def _parse_default_word(self, text: str, line: int, col: int) -> Word:
         """把 ``${name:-word}`` 里的默认值解析成一个逻辑单词。

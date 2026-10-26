@@ -32,6 +32,7 @@ from transpiler.errors import CodegenError, LexError, ParseError, TranspileError
         ("break", CodegenError, "outside a loop"),
         ("continue", CodegenError, "outside a loop"),
         ("shift 1 2", CodegenError, "at most one argument"),
+        ('echo "${@#x}"', CodegenError, "pattern expansion"),
     ],
 )
 def test_unsupported_constructs_raise_typed_errors(source, expected_type, message):

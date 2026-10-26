@@ -560,4 +560,43 @@ def _param_error(name, message, only_if_empty):
         _sys.stderr.write(f"{name}: {message}\n")
         raise SystemExit(1)
     return str(current)
+
+
+def _param_strip(value, pattern, direction, longest):
+    """${var#pattern} / ${var%pattern} 系列：按 glob 模式裁剪前缀或后缀。"""
+    text = str(value)
+    pat = str(pattern)
+    if pat == "":
+        return text
+    size = len(text)
+    lengths = range(size, -1, -1) if longest else range(0, size + 1)
+    if direction == "prefix":
+        for length in lengths:
+            if _fnmatch.fnmatchcase(text[:length], pat):
+                return text[length:]
+    else:
+        for length in lengths:
+            candidate = text[size - length :] if length else ""
+            if _fnmatch.fnmatchcase(candidate, pat):
+                return text[: size - length] if length else text
+    return text
+
+
+def _param_replace(value, pattern, replacement, replace_all):
+    """${var/old/new} / ${var//old/new}：按 glob 模式做替换。"""
+    text = str(value)
+    pat = str(pattern)
+    repl = str(replacement)
+    if pat == "":
+        return text
+    translated = _fnmatch.translate(pat)
+    # Python 3.14 把结尾锚点输出成 \z，旧版本是 \Z；两种都去掉，
+    # 这样正则可以匹配任意子串，而不要求匹配到字符串末尾。
+    if translated.endswith(("\\Z", "\\z")):
+        translated = translated[:-2]
+    try:
+        regex = _re.compile(translated)
+    except _re.error:
+        return text
+    return regex.sub(repl, text, count=0 if replace_all else 1)
 '''

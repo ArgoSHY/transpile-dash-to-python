@@ -100,6 +100,43 @@ def test_parameter_default_operator():
     assert joined(segment.default) == "fallback"
 
 
+def test_pattern_parameter_expansions():
+    cases = [
+        ("${name#pre}", "#", "pre", None),
+        ("${name##*/}", "##", "*/", None),
+        ("${name%suf}", "%", "suf", None),
+        ("${name%%*.txt}", "%%", "*.txt", None),
+        ("${name/old/new}", "/", "old", "new"),
+        ("${name//old/new}", "//", "old", "new"),
+        ("${name/old}", "/", "old", ""),
+        ("${name#}", "#", "", None),
+    ]
+    for source, operator, pattern, replacement in cases:
+        (word,) = words(source)
+        segment = word.segments[0]
+        assert isinstance(segment, ParameterSegment)
+        assert segment.op == operator
+        assert segment.default is not None
+        assert joined(segment.default) == pattern
+        if replacement is None:
+            assert segment.replacement is None
+        else:
+            assert segment.replacement is not None
+            assert joined(segment.replacement) == replacement
+
+
+def test_pattern_with_quoted_or_escaped_slash():
+    (word,) = words(r"${name/a\/b/x}")
+    segment = word.segments[0]
+    assert joined(segment.default) == "a/b"
+    assert joined(segment.replacement) == "x"
+
+    (word,) = words('${name/"a/b"/x}')
+    segment = word.segments[0]
+    assert joined(segment.default) == "a/b"
+    assert joined(segment.replacement) == "x"
+
+
 def test_plain_positional_ten_is_one_digit_plus_literal_zero():
     # POSIX 规定 $10 是 ${1} 后面跟一个字面量 0。
     (word,) = words("$10")

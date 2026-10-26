@@ -84,7 +84,7 @@ dependency is needed by the transpiler or by generated programs.
 |---|---|
 | Comments / shebang | `#` comments; `#!/bin/dash` ignored (the generated program has its own Python shebang) |
 | Quoting | single quotes, double quotes, backslash escapes, line continuation, empty quoted words |
-| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants |
+| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants; string patterns `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`, `${var/old/new}`, `${var//old/new}` |
 | Command substitution | `$(simple command)` and `` `simple command` `` (trailing newlines stripped) |
 | Arithmetic | `$((...))` with `+ - * / % ** << >> & \| ^ ~ ! && \|\| == != < <= > >= ?:` and variables; integer division maps to `//` |
 | Globbing | unquoted `*`, `?`, `[...]` expanded with `glob`; quoted patterns stay literal |
@@ -152,7 +152,7 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-258 passed, 20 skipped
+274 passed, 20 skipped
 ```
 
 The 20 skips are exactly the differential tests; on Linux the same suite runs them too.
