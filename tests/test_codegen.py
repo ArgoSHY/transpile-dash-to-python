@@ -78,7 +78,16 @@ CODEGEN_CASES = [
     ),
     pytest.param(
         "false && echo yes || echo no",
-        "_status = 0 if (((False and _ok(_echo(['yes']))) or _ok(_echo(['no'])))) else 1\n" + EXIT,
+        "_andor_last = 0\n"
+        "_status = _false()\n"
+        "_andor_run = _ok(_status)\n"
+        "if _andor_run:\n"
+        "    _andor_last = 1\n"
+        "    _status = _echo(['yes'])\n"
+        "_andor_run = not _ok(_status)\n"
+        "if _andor_run:\n"
+        "    _andor_last = 2\n"
+        "    _status = _echo(['no'])\n" + EXIT,
         id="and-or",
     ),
     pytest.param(

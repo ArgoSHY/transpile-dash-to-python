@@ -128,6 +128,8 @@ class CodeGenerator:
         # 只有脚本里出现 set -e/+e 时才生成 _check_errexit()，避免给普通脚本
         # 增加无意义的运行时调用（也保持旧 golden 输出稳定）。
         self.errexit_checks = False
+        # 在 &&/|| 列表内部暂时屏蔽逐命令检查，由列表末尾统一决定是否触发 -e。
+        self.suppress_errexit = 0
 
     # ------------------------------------------------------------------ 对外接口
     def generate(self, script: Script) -> str:
@@ -169,7 +171,7 @@ class CodeGenerator:
 
     def _emit_errexit_check(self) -> None:
         """在可能需要触发 set -e 的语句后生成运行时检查。"""
-        if self.errexit_checks:
+        if self.errexit_checks and self.suppress_errexit == 0:
             self.writer.line("_check_errexit()")
 
     def _error_for(self, message: str, command: Command) -> CodegenError:
@@ -195,23 +197,57 @@ class CodeGenerator:
 
     def _emit_statement(self, node: AndOr) -> None:
         if node.rest:
-            expression = self._condition_expr(node)
-            self.writer.line(f"_status = 0 if ({expression}) else 1")
-            self._emit_errexit_check()
+            self._emit_and_or(node)
             return
+        self._emit_pipeline_statement(node.first)
         pipeline = node.first
+        if pipeline is not None and pipeline.commands:
+            command = pipeline.commands[0]
+            # 复合命令/break/continue 内部各语句已经带了检查；set 自身不检查。
+            if len(pipeline.commands) == 1:
+                if isinstance(command, SimpleCommand) and not isinstance(command, SetCommand):
+                    self._emit_errexit_check()
+            else:
+                self._emit_errexit_check()
+
+    def _emit_pipeline_statement(self, pipeline: Pipeline | None) -> None:
+        """执行一个 pipeline，并把真实退出码写进 ``_status``。"""
         if pipeline is None or not pipeline.commands:
             self.writer.line("_status = 0")
             return
         if len(pipeline.commands) == 1:
-            command = pipeline.commands[0]
-            self._emit_command(command)
-            # 复合命令/break/continue 内部各语句已经带了检查；set 自身不检查。
-            if isinstance(command, SimpleCommand) and not isinstance(command, SetCommand):
-                self._emit_errexit_check()
+            self._emit_command(pipeline.commands[0])
         else:
             self.writer.line(f"_status = {self._pipeline_expr(pipeline)}")
-            self._emit_errexit_check()
+
+    def _emit_and_or(self, node: AndOr) -> None:
+        """按 POSIX 短路规则顺序执行 &&/|| 列表，保留每个命令的真实状态。
+
+        不能把整个列表压成 0/1 布尔表达式：``cmd1 || cmd2`` 的最终状态必须来自
+        实际最后执行的那条命令；set -e 也只能在列表最后一条命令失败时触发。
+        """
+        self.writer.line("_andor_last = 0")
+        self.suppress_errexit += 1
+        try:
+            self._emit_pipeline_statement(node.first)
+            for index, (operator, pipeline) in enumerate(node.rest, start=1):
+                if operator == "&&":
+                    self.writer.line("_andor_run = _ok(_status)")
+                else:
+                    self.writer.line("_andor_run = not _ok(_status)")
+                self.writer.line("if _andor_run:")
+                self.writer.indent()
+                self.writer.line(f"_andor_last = {index}")
+                self._emit_pipeline_statement(pipeline)
+                self.writer.dedent()
+        finally:
+            self.suppress_errexit -= 1
+        if self.errexit_checks:
+            # 只有最后一条命令真的执行且失败时，set -e 才退出。
+            self.writer.line(f"if _andor_last == {len(node.rest)}:")
+            self.writer.indent()
+            self.writer.line("_check_errexit()")
+            self.writer.dedent()
 
     def _emit_command(self, command: Command) -> None:
         emitter_name = _COMMAND_EMITTERS.get(type(command))

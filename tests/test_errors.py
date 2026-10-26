@@ -28,7 +28,6 @@ from transpiler.errors import CodegenError, LexError, ParseError, TranspileError
         ("cd / | cat", CodegenError, "pipeline"),
         ("read 1bad", CodegenError, "identifier"),
         ("x=$(if true; then echo x; fi)", CodegenError, "command substitution"),
-        ("if true; then echo x; fi && echo y", CodegenError, "&&"),
         ("break", CodegenError, "outside a loop"),
         ("continue", CodegenError, "outside a loop"),
         ("shift 1 2", CodegenError, "at most one argument"),

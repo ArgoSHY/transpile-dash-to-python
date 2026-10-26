@@ -86,6 +86,9 @@ CASES = [
     pytest.param('x=abcdef\necho "${x:2:3}"', {}, id="substring"),
     pytest.param('set -- a b\nshift\necho "$# $1"', {}, id="set-positional"),
     pytest.param("printf '%s:%03d\\n' n 7", {}, id="printf"),
+    pytest.param('false && echo "hi"\necho $?', {}, id="and-or-status"),
+    pytest.param("set -e\nfalse && echo hi\necho after", {}, id="set-e-and-or"),
+    pytest.param("set -e\ntrue && false\necho after", {}, id="set-e-and-or-fail"),
 ]
 
 

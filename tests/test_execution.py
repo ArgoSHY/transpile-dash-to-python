@@ -720,6 +720,66 @@ def test_printf_stdout_redirect(run_shell):
     assert (result.workdir / "out.txt").read_text(encoding="utf-8") == "hi\n"
 
 
+def test_false_and_short_circuit_keeps_literal_status(run_shell):
+    result = run_shell('false && echo "hi"\necho $?')
+    assert result.stdout == "1\n"
+
+
+def test_and_or_short_circuit_status(run_shell):
+    assert run_shell('false && echo hi\necho "status=$?"').stdout == "status=1\n"
+    assert run_shell('true && echo hi\necho "status=$?"').stdout == "hi\nstatus=0\n"
+    assert run_shell('false || echo fallback\necho "status=$?"').stdout == ("fallback\nstatus=0\n")
+    assert run_shell('true || echo no\necho "status=$?"').stdout == "status=0\n"
+
+
+def test_and_or_preserves_real_exit_status(run_shell):
+    result = run_shell(
+        f'{py("exit7.py")} && echo yes\necho "status=$?"',
+        files={"exit7.py": "raise SystemExit(7)\n"},
+    )
+    assert result.stdout == "status=7\n"
+
+
+def test_and_or_left_associative_precedence(run_shell):
+    assert run_shell("true || echo no && echo yes").stdout == "yes\n"
+    assert run_shell("false && echo no || echo yes").stdout == "yes\n"
+
+
+def test_compound_command_in_and_or(run_shell):
+    result = run_shell("if true; then echo x; fi && echo y")
+    assert result.stdout == "x\ny\n"
+
+
+def test_set_e_ignores_failure_in_non_final_and_or(run_shell):
+    result = run_shell("set -e\nfalse && echo hi\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_exits_when_final_and_or_command_fails(run_shell):
+    result = run_shell("set -e\ntrue && false\necho after")
+    assert result.stdout == ""
+    assert result.returncode == 1
+
+
+def test_set_e_or_list_continues(run_shell):
+    result = run_shell("set -e\nfalse || true\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_or_recovery_continues(run_shell):
+    result = run_shell("set -e\ntrue && false || echo recovered\necho after")
+    assert result.stdout == "recovered\nafter\n"
+    assert result.returncode == 0
+
+
+def test_set_e_exits_when_or_final_command_fails(run_shell):
+    result = run_shell("set -e\nfalse || false\necho after")
+    assert result.stdout == ""
+    assert result.returncode == 1
+
+
 def test_set_resets_positional_arguments(run_shell):
     result = run_shell('set -- a b c\necho "$# $1 $3"')
     assert result.stdout == "3 a c\n"
