@@ -262,3 +262,18 @@ def test_here_document_is_rejected_explicitly():
 def test_case_fallthrough_operator_is_rejected_explicitly():
     with pytest.raises(LexError, match="fall-through"):
         lex("case x in a) : ;& esac")
+
+
+def test_substring_parameter_expansion():
+    for source, offset, length in [
+        ("${name:2}", "2", None),
+        ("${name:2:3}", "2", "3"),
+        ("${name: -2}", "-2", None),
+        ("${name:0:2}", "0", "2"),
+    ]:
+        (word,) = words(source)
+        segment = word.segments[0]
+        assert isinstance(segment, ParameterSegment)
+        assert segment.op == "substring"
+        assert segment.offset == offset
+        assert segment.length == length

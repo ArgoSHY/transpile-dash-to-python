@@ -686,6 +686,24 @@ def test_set_e_success_continues(run_shell):
     assert result.returncode == 0
 
 
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ('x=abcdef\necho "${x:2}"', "cdef\n"),
+        ('x=abcdef\necho "${x:2:3}"', "cde\n"),
+        ('x=abcdef\necho "${x:0:2}"', "ab\n"),
+        ('x=abcdef\necho "${x: -2}"', "ef\n"),
+        ('x=abcdef\necho "${x: -3:2}"', "de\n"),
+        ('x=abcdef\necho "${x:10}"', "\n"),
+        ('x=abcdef\necho "${x:2:0}"', "\n"),
+        ('i=1\nn=3\nx=abcdef\necho "${x:$i:$n}"', "bcd\n"),
+        ('echo "${unsetvar:1:2}"', "\n"),
+    ],
+)
+def test_substring_expansions(run_shell, source, expected):
+    assert run_shell(source).stdout == expected
+
+
 def test_custom_ifs_splits_fields(run_shell):
     result = run_shell('IFS=,\nx="a,b,c"\nfor y in $x; do\necho "[$y]"\ndone')
     assert result.stdout == "[a]\n[b]\n[c]\n"

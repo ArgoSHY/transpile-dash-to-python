@@ -418,6 +418,19 @@ class Lexer:
             if rest.startswith(op):
                 default_word = self._parse_default_word(rest[len(op) :], line, col)
                 return ParameterSegment(name, quoted=quoted, op=op, default=default_word)
+        # ${var:offset[:length]}；默认值运算符已经在上面的循环里优先匹配。
+        if rest.startswith(":"):
+            body = rest[1:]
+            offset_text, separator, length_text = body.partition(":")
+            offset_value = offset_text.strip() or "0"
+            length_value = length_text.strip() if separator and length_text.strip() else None
+            return ParameterSegment(
+                name,
+                quoted=quoted,
+                op="substring",
+                offset=offset_value,
+                length=length_value,
+            )
         for op in _PATTERN_OPS:
             if rest.startswith(op):
                 body = rest[len(op) :]

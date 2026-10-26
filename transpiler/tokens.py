@@ -34,6 +34,7 @@ class ParameterSegment:
 
     ``default`` 对 ``:-``/``:=`` 等默认值运算符表示默认值；对 ``#``/``%`` 和
     ``/`` 系列表示要匹配的 pattern。``replacement`` 只用于 ``/`` / ``//``。
+    ``offset`` / ``length`` 用于 ``${var:offset:length}``，保存算术表达式源码。
     """
 
     name: str
@@ -41,6 +42,8 @@ class ParameterSegment:
     op: str | None = None
     default: Word | None = None
     replacement: Word | None = None
+    offset: str | None = None
+    length: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

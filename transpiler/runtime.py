@@ -768,6 +768,19 @@ def _param_error(name, message, only_if_empty):
     return str(current)
 
 
+def _substring(value, offset, length=None):
+    """${var:offset:length}：按字符取子串，负 offset 从末尾开始。"""
+    text = str(value)
+    start = offset
+    if start < 0:
+        start = max(len(text) + start, 0)
+    if length is None:
+        return text[start:]
+    if length < 0:
+        return ""
+    return text[start : start + length]
+
+
 def _param_strip(value, pattern, direction, longest):
     """${var#pattern} / ${var%pattern} 系列：按 glob 模式裁剪前缀或后缀。"""
     text = str(value)

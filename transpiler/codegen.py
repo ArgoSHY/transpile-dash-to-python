@@ -761,6 +761,8 @@ class CodeGenerator:
             if name in ("@", "*"):
                 return [f"({kind!r}, str(len(_argv())))"]
             return [f"({kind!r}, str(len({self._parameter_base_expr(name)})))"]
+        if segment.op == "substring":
+            return [f"({kind!r}, {self._parameter_substring_expr(segment)})"]
         # 模式运算优先处理，这样 ${@#x} 这类不支持的特殊参数也会走明确的报错分支。
         if segment.op in _PATTERN_PARAM_OPS:
             return [f"({kind!r}, {self._parameter_pattern_expr(segment)})"]
@@ -814,6 +816,21 @@ class CodeGenerator:
             only_if_empty = "True" if operator == ":?" else "False"
             return f"_param_error({name!r}, ({default}), {only_if_empty})"
         raise CodegenError(f"unsupported parameter operator {operator!r}", filename=self.filename)
+
+    def _parameter_substring_expr(self, segment: ParameterSegment) -> str:
+        """生成 ${var:offset} / ${var:offset:length} 表达式。"""
+        name = segment.name
+        if name in ("@", "*", "!"):
+            raise CodegenError(
+                f"substring expansion is not supported for ${name}",
+                filename=self.filename,
+            )
+        base = self._parameter_base_expr(name)
+        offset = arith.translate(segment.offset or "0", self.filename)
+        if segment.length is None:
+            return f"_substring({base}, ({offset}))"
+        length = arith.translate(segment.length, self.filename)
+        return f"_substring({base}, ({offset}), ({length}))"
 
     def _parameter_pattern_expr(self, segment: ParameterSegment) -> str:
         """生成 ${var#pat} / ${var%pat} / ${var/old/new} 系列表达式。"""
