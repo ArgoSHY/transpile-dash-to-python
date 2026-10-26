@@ -47,7 +47,20 @@ from .tokens import (
 )
 
 _BUILTINS = frozenset(
-    {"echo", "cd", "exit", "read", "shift", "true", "false", ":", "pwd", "export", "unset"}
+    {
+        "echo",
+        "printf",
+        "cd",
+        "exit",
+        "read",
+        "shift",
+        "true",
+        "false",
+        ":",
+        "pwd",
+        "export",
+        "unset",
+    }
 )
 _GLOB_CHARS = "*?["
 _PATTERN_PARAM_OPS = frozenset({"#", "##", "%", "%%", "/", "//"})
@@ -374,6 +387,8 @@ class CodeGenerator:
         name = command.words[0].static_text()
         if name == "echo":
             self._emit_echo(command)
+        elif name == "printf":
+            self._emit_printf(command)
         elif name == "cd":
             target = self._value_expr(command.words[1]) if len(command.words) > 1 else '""'
             self.writer.line(f"_status = _cd({target})")
@@ -462,6 +477,20 @@ class CodeGenerator:
         if kwargs:
             suffix = ", " + ", ".join(kwargs)
         self.writer.line(f"_status = _echo({arguments}{suffix})")
+
+    def _emit_printf(self, command: SimpleCommand) -> None:
+        arguments = self._argv_expr(command.words[1:])
+        all_kwargs = self._redirect_kwargs(command.redirects, allowed=_ALL_REDIRECT_KEYS)
+        kwargs = [
+            item
+            for item in all_kwargs
+            if item.split("=", 1)[0]
+            in {"stdout_path", "stdout_append", "stderr_path", "stderr_append"}
+        ]
+        if self._echo_redirects_to_stderr(command.redirects):
+            kwargs.append("stderr=True")
+        suffix = (", " + ", ".join(kwargs)) if kwargs else ""
+        self.writer.line(f"_status = _printf({arguments}{suffix})")
 
     def _read_spec(self, command: SimpleCommand) -> tuple[list[str], str]:
         """解析 read 的变量名和重定向参数，语句和条件两种位置共用。"""
@@ -615,6 +644,19 @@ class CodeGenerator:
                 kwargs.append("escapes=False")
             suffix = (", " + ", ".join(kwargs)) if kwargs else ""
             return f"_ok(_echo({arguments}{suffix}))"
+        if name == "printf":
+            arguments = self._argv_expr(command.words[1:])
+            all_kwargs = self._redirect_kwargs(command.redirects, allowed=_ALL_REDIRECT_KEYS)
+            kwargs = [
+                item
+                for item in all_kwargs
+                if item.split("=", 1)[0]
+                in {"stdout_path", "stdout_append", "stderr_path", "stderr_append"}
+            ]
+            if self._echo_redirects_to_stderr(command.redirects):
+                kwargs.append("stderr=True")
+            suffix = (", " + ", ".join(kwargs)) if kwargs else ""
+            return f"_ok(_printf({arguments}{suffix}))"
         if name == "cd":
             target = self._value_expr(command.words[1]) if len(command.words) > 1 else '""'
             return f"_ok(_cd({target}))"
@@ -687,6 +729,9 @@ class CodeGenerator:
                 newline, escapes, consumed = self._echo_flags(command)
                 arguments = self._argv_expr(command.words[1 + consumed :])
                 stages.append(f"('echo', {arguments}, {newline!r}, {escapes!r})")
+                continue
+            if name == "printf":
+                stages.append(f"('printf', {self._argv_expr(command.words[1:])})")
                 continue
             # grep/wc 在这里被截获成纯 Python 阶段，不依赖系统命令。
             if name == "grep":
@@ -904,6 +949,8 @@ class CodeGenerator:
         name = command.words[0].static_text()
         if name == "echo":
             return f"_cmdsub_echo({self._argv_expr(command.words[1:])})"
+        if name == "printf":
+            return f"_printf_render({self._argv_expr(command.words[1:])})[0]"
         if name in _BUILTINS:
             raise CodegenError(
                 f"builtin {name!r} inside command substitution is not supported",

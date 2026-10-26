@@ -686,6 +686,40 @@ def test_set_e_success_continues(run_shell):
     assert result.returncode == 0
 
 
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("printf 'hello\\n'", "hello\n"),
+        ("printf '%s\\n' one two", "one\ntwo\n"),
+        ("printf '%s is %d\\n' age 42", "age is 42\n"),
+        ("printf '%5s|%-5s|%03d\\n' a b 7", "    a|b    |007\n"),
+        ("printf '%x %o %c\\n' 255 8 abc", "ff 10 a\n"),
+        ("printf '%s:%s\\n' a", "a:\n"),
+        ("printf '%%\\n'", "%\n"),
+        ("printf '%b\\n' 'x\\ty'", "x\ty\n"),
+        ("printf 'a\\cb\\n'", "a"),
+    ],
+)
+def test_printf_builtin(run_shell, source, expected):
+    assert run_shell(source).stdout == expected
+
+
+def test_printf_in_pipeline(run_shell):
+    result = run_shell("printf '%s\\n' a b | grep b")
+    assert result.stdout == "b\n"
+
+
+def test_printf_in_command_substitution(run_shell):
+    result = run_shell("x=$(printf '%s' hi)\necho \"$x\"")
+    assert result.stdout == "hi\n"
+
+
+def test_printf_stdout_redirect(run_shell):
+    result = run_shell("printf 'hi\\n' > out.txt\necho done")
+    assert result.stdout == "done\n"
+    assert (result.workdir / "out.txt").read_text(encoding="utf-8") == "hi\n"
+
+
 def test_set_resets_positional_arguments(run_shell):
     result = run_shell('set -- a b c\necho "$# $1 $3"')
     assert result.stdout == "3 a c\n"

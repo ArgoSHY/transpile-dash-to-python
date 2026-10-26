@@ -83,6 +83,9 @@ CASES = [
     pytest.param("echo *.nonexistent", {}, id="unmatched-glob"),
     pytest.param('echo "$(echo "a b")"', {}, id="nested-quotes"),
     pytest.param('x=hello\necho "${#x}"', {}, id="parameter-length"),
+    pytest.param('x=abcdef\necho "${x:2:3}"', {}, id="substring"),
+    pytest.param('set -- a b\nshift\necho "$# $1"', {}, id="set-positional"),
+    pytest.param("printf '%s:%03d\\n' n 7", {}, id="printf"),
 ]
 
 

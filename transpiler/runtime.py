@@ -285,6 +285,174 @@ def _escape_echo(text):
     return "".join(out)
 
 
+def _printf_unescape(text):
+    """处理 printf 的格式串/``%b`` 参数转义；返回文本和是否遇到 ``\\c``。"""
+    out = []
+    index = 0
+    mapping = {
+        "n": "\n",
+        "t": "\t",
+        "r": "\r",
+        "\\": "\\",
+        "b": "\b",
+        "f": "\f",
+        "v": "\v",
+        "a": "\a",
+    }
+    while index < len(text):
+        char = text[index]
+        if char != "\\":
+            out.append(char)
+            index += 1
+            continue
+        if index + 1 >= len(text):
+            out.append("\\")
+            break
+        nxt = text[index + 1]
+        if nxt in mapping:
+            out.append(mapping[nxt])
+            index += 2
+        elif nxt == "c":
+            return "".join(out), True
+        elif nxt in "01234567":
+            end = index + 1
+            digits = ""
+            while end < len(text) and len(digits) < 3 and text[end] in "01234567":
+                digits += text[end]
+                end += 1
+            out.append(chr(int(digits, 8) & 0xFF))
+            index = end
+        else:
+            out.append("\\")
+            out.append(nxt)
+            index += 2
+    return "".join(out), False
+
+
+def _printf_int(text):
+    match = _re.match(r"[+-]?\d+", str(text).strip())
+    return int(match.group(0)) if match else 0
+
+
+def _printf_render(arguments):
+    """把 shell printf 的参数渲染成文本，返回 ``(text, status)``。"""
+    if not arguments:
+        _sys.stderr.write("printf: usage: printf format [arguments]\n")
+        return "", 2
+    fmt, format_stopped = _printf_unescape(str(arguments[0]))
+    values = [str(item) for item in arguments[1:]]
+    output = []
+    status = 0
+    value_index = 0
+    stopped = format_stopped
+    while True:
+        consumed = 0
+        index = 0
+        while index < len(fmt):
+            char = fmt[index]
+            if char != "%":
+                output.append(char)
+                index += 1
+                continue
+            if index + 1 < len(fmt) and fmt[index + 1] == "%":
+                output.append("%")
+                index += 2
+                continue
+            cursor = index + 1
+            flags = ""
+            while cursor < len(fmt) and fmt[cursor] in "#0- +":
+                flags += fmt[cursor]
+                cursor += 1
+            width = ""
+            while cursor < len(fmt) and fmt[cursor].isdigit():
+                width += fmt[cursor]
+                cursor += 1
+            precision = ""
+            has_precision = False
+            if cursor < len(fmt) and fmt[cursor] == ".":
+                has_precision = True
+                cursor += 1
+                while cursor < len(fmt) and fmt[cursor].isdigit():
+                    precision += fmt[cursor]
+                    cursor += 1
+            if cursor >= len(fmt):
+                output.append("%")
+                status = 1
+                break
+            conversion = fmt[cursor]
+            cursor += 1
+            spec = "%" + flags + width + ("." + precision if has_precision else "")
+            value = values[value_index] if value_index < len(values) else ""
+            value_index += 1
+            consumed += 1
+            rendered = None
+            try:
+                if conversion == "s":
+                    rendered = (spec + "s") % value
+                elif conversion == "c":
+                    text_value = value[:1]
+                    rendered = (spec + "c") % text_value if text_value else (spec + "s") % ""
+                elif conversion == "b":
+                    text_value, value_stopped = _printf_unescape(value)
+                    rendered = (spec + "s") % text_value
+                    if value_stopped:
+                        stopped = True
+                elif conversion in ("d", "i", "u"):
+                    number = _printf_int(value)
+                    if conversion == "u" and number < 0:
+                        number %= 1 << 32
+                    rendered = (spec + "d") % number
+                elif conversion == "o":
+                    rendered = (spec + "o") % _printf_int(value)
+                elif conversion in ("x", "X"):
+                    rendered = (spec + conversion) % _printf_int(value)
+                elif conversion in ("f", "e", "E", "g", "G"):
+                    try:
+                        number = float(value or 0)
+                    except ValueError:
+                        number = 0.0
+                        status = 1
+                    rendered = (spec + conversion) % number
+                else:
+                    output.append("%" + conversion)
+                    status = 1
+            except (TypeError, ValueError):
+                status = 1
+            if rendered is not None:
+                output.append(rendered)
+            index = cursor
+            if stopped:
+                break
+        if stopped:
+            break
+        if value_index < len(values) and consumed > 0:
+            continue
+        break
+    return "".join(output), status
+
+
+def _printf(arguments, stdout_path=None, stdout_append=False, stderr=False,
+            stderr_path=None, stderr_append=False):
+    text, status = _printf_render(arguments)
+    try:
+        if stderr:
+            if stdout_path is not None:
+                _write("", stdout_path, stdout_append)
+            if stderr_path is not None:
+                _write(text, stderr_path, stderr_append)
+            else:
+                _write(text, stderr=True)
+            return status
+        if stderr_path is not None:
+            _write("", stderr_path, stderr_append)
+        _write(text, stdout_path, stdout_append)
+    except OSError as error:
+        target = stderr_path or stdout_path or "<stdout>"
+        _sys.stderr.write(f"{target}: {error}\n")
+        return 1
+    return status
+
+
 def _echo(args, newline=True, escapes=True, stdout_path=None, stdout_append=False,
           stderr=False, stderr_path=None, stderr_append=False):
     text = " ".join(str(item) for item in args)
@@ -545,6 +713,8 @@ def _pipeline(stages):
             elif kind == "wc":
                 source = data if data is not None else _pipeline_read_stdin()
                 data, status = _pipeline_wc(source, stage[1])
+            elif kind == "printf":
+                data, status = _printf_render(stage[1])
             elif kind in ("true", "false", ":"):
                 data = ""
                 status = 1 if kind == "false" else 0

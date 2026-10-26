@@ -186,7 +186,10 @@ SYNTAX_CASES = [
     "echo hello | grep hello | wc -l",
     "set -e\nfalse\necho after",
     "set +e\nfalse\necho after",
+    "set -- a b",
     "echo hi >&2",
+    "printf '%s\\n' hi",
+    "printf '%s\\n' a b | grep a",
 ]
 
 
