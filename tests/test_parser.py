@@ -198,3 +198,12 @@ def test_command_nodes_carry_source_position():
         parse("for i in 1; do :; done").body[0].first.commands[0],
     ]
     assert [(command.line, command.col) for command in commands] == [(2, 1), (1, 1), (1, 1)]
+
+
+def test_compound_command_redirections():
+    while_node = script("while read line; do echo $line; done < input.txt")[0].first.commands[0]
+    if_node = script("if true; then echo yes; fi < input.txt")[0].first.commands[0]
+    assert isinstance(while_node, WhileCommand)
+    assert [redirect.op for redirect in while_node.redirects] == ["<"]
+    assert isinstance(if_node, IfCommand)
+    assert [redirect.op for redirect in if_node.redirects] == ["<"]

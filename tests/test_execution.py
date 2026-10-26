@@ -531,3 +531,51 @@ def test_string_pattern_expansions(run_shell, source, expected):
 
 def test_pattern_expansion_on_unset_variable(run_shell):
     assert run_shell('echo "[${missing#pre}]"').stdout == "[]\n"
+
+
+def test_while_read_from_redirected_file(run_shell):
+    result = run_shell(
+        'while read line; do\necho "line:$line"\ndone < input.txt',
+        files={"input.txt": "alpha\nbeta\ngamma\n"},
+    )
+    assert result.stdout == "line:alpha\nline:beta\nline:gamma\n"
+
+
+def test_if_read_from_redirected_file(run_shell):
+    result = run_shell(
+        'if read x; then\necho "x=$x"\nfi < input.txt',
+        files={"input.txt": "alpha\n"},
+    )
+    assert result.stdout == "x=alpha\n"
+
+
+def test_for_loop_reads_successive_lines_from_redirect(run_shell):
+    result = run_shell(
+        'for i in 1 2; do\nread line\necho "$i:$line"\ndone < input.txt',
+        files={"input.txt": "alpha\nbeta\n"},
+    )
+    assert result.stdout == "1:alpha\n2:beta\n"
+
+
+def test_nested_compound_redirects_share_stdin(run_shell):
+    result = run_shell(
+        'while read a; do\nif read b; then\necho "$a-$b"\nfi\ndone < input.txt',
+        files={"input.txt": "alpha\nbeta\ngamma\n"},
+    )
+    assert result.stdout == "alpha-beta\n"
+
+
+def test_external_command_uses_compound_redirected_stdin(run_shell):
+    result = run_shell(
+        f"if true; then\n{py('readstdin.py')}\nfi < input.txt",
+        files={
+            "input.txt": "alpha\nbeta\n",
+            "readstdin.py": "import sys\nprint(sys.stdin.read().strip().replace(chr(10), ','))\n",
+        },
+    )
+    assert result.stdout == "alpha,beta\n"
+
+
+def test_read_returns_failure_at_eof(run_shell):
+    result = run_shell('read x < empty.txt\necho "status=$?"', files={"empty.txt": ""})
+    assert result.stdout == "status=1\n"

@@ -89,6 +89,7 @@ class SimpleCommand(Command):
 class IfCommand(Command):
     branches: list[tuple[AndOr, list[Stmt]]] = field(default_factory=list)
     else_body: list[Stmt] = field(default_factory=list)
+    redirects: list[Redirect] = field(default_factory=list)
     line: int = 1
     col: int = 1
 
@@ -98,6 +99,7 @@ class WhileCommand(Command):
     condition: AndOr | None = None
     body: list[Stmt] = field(default_factory=list)
     until: bool = False
+    redirects: list[Redirect] = field(default_factory=list)
     line: int = 1
     col: int = 1
 
@@ -107,6 +109,7 @@ class ForCommand(Command):
     var: str = ""
     words: list[Word] | None = None
     body: list[Stmt] = field(default_factory=list)
+    redirects: list[Redirect] = field(default_factory=list)
     line: int = 1
     col: int = 1
 
@@ -115,6 +118,7 @@ class ForCommand(Command):
 class CaseCommand(Command):
     word: Word | None = None
     items: list[tuple[list[Word], list[Stmt]]] = field(default_factory=list)
+    redirects: list[Redirect] = field(default_factory=list)
     line: int = 1
     col: int = 1
 

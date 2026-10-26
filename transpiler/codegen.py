@@ -109,6 +109,8 @@ class CodeGenerator:
         self.writer = _Writer()
         # 记录当前嵌套在几层循环里，用于校验 break/continue 的合法性。
         self.loop_depth = 0
+        # 复合命令重定向的 with 变量需要唯一名字，避免嵌套时互相覆盖。
+        self.redirect_counter = 0
 
     # ------------------------------------------------------------------ 对外接口
     def generate(self, script: Script) -> str:
@@ -161,7 +163,43 @@ class CodeGenerator:
                 command.col,
                 self.filename,
             )
+        if isinstance(command, (IfCommand, WhileCommand, ForCommand, CaseCommand)):
+            if command.redirects:
+                self._emit_redirected_compound(command, emitter_name)
+                return
         getattr(self, emitter_name)(command)
+
+    def _emit_redirected_compound(self, command: Command, emitter_name: str) -> None:
+        """用 ``with open(...)`` 包裹复合命令，块内命令共享同一个 stdin。
+
+        目前只支持输入重定向（如 ``while read line; do ... done < file``）；
+        输出重定向需要捕获整个代码块的 stdout，留到后续步骤实现。
+        """
+        assert isinstance(command, (IfCommand, WhileCommand, ForCommand, CaseCommand))
+        redirects = command.redirects
+        unsupported = [redirect for redirect in redirects if redirect.op != "<"]
+        if unsupported:
+            raise self._error_for(
+                f"compound command redirection {unsupported[0].op!r} is not supported",
+                command,
+            )
+        if not redirects or redirects[-1].target is None:
+            raise self._error_for("compound input redirection needs a file", command)
+        path = self._value_expr(redirects[-1].target)
+        self.redirect_counter += 1
+        variable = f"_dsh_stdin_{self.redirect_counter}"
+        self.writer.line(f"with open({path}, 'r', encoding='utf-8') as {variable}:")
+        self.writer.indent()
+        self.writer.line(f"_stdin_stack.append({variable})")
+        self.writer.line("try:")
+        self.writer.indent()
+        getattr(self, emitter_name)(command)
+        self.writer.dedent()
+        self.writer.line("finally:")
+        self.writer.indent()
+        self.writer.line("_stdin_stack.pop()")
+        self.writer.dedent()
+        self.writer.dedent()
 
     # ------------------------------------------------------------------ 复合命令
     @_emits(IfCommand)
@@ -339,7 +377,8 @@ class CodeGenerator:
             suffix = ", " + ", ".join(kwargs)
         self.writer.line(f"_status = _echo({arguments}{suffix})")
 
-    def _emit_read(self, command: SimpleCommand) -> None:
+    def _read_spec(self, command: SimpleCommand) -> tuple[list[str], str]:
+        """解析 read 的变量名和重定向参数，语句和条件两种位置共用。"""
         names: list[str] = []
         for word in command.words[1:]:
             text = word.static_text()
@@ -353,6 +392,10 @@ class CodeGenerator:
             names.append(text)
         kwargs = self._redirect_kwargs(command.redirects, allowed={"stdin_path"})
         suffix = (", " + ", ".join(kwargs)) if kwargs else ""
+        return names, suffix
+
+    def _emit_read(self, command: SimpleCommand) -> None:
+        names, suffix = self._read_spec(command)
         self.writer.line(f"_status = _read_vars({names!r}{suffix})")
 
     def _emit_external(self, command: SimpleCommand) -> None:
@@ -501,7 +544,8 @@ class CodeGenerator:
         if name == "shift":
             return f"_ok(_shift({self._shift_count_expr(command)}))"
         if name == "read":
-            raise self._error_for("'read' in a condition is not supported", command)
+            names, suffix = self._read_spec(command)
+            return f"_ok(_read_vars({names!r}{suffix}))"
         if name == "exit":
             raise self._error_for("'exit' in a condition is not supported", command)
         return f"_ok({self._external_call_expr(command)})"

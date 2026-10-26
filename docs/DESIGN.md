@@ -124,6 +124,7 @@ Important runtime conventions:
 | external command | `_run(argv, stdin_path=..., stdout_path=..., ..., env_extra=...)` |
 | pipeline | `_pipeline([stage, ...])`; a stage is an argv list or `('echo', args, newline, escapes)` |
 | test expression | `_test_unary(op, value)` / `_test_binary(op, left, right)` |
+| compound input redirection | generated `with open(path) as _dsh_stdin_N:` plus `_stdin_stack.append/pop`; `_run`, `_read_vars`, `_pipeline`, `_cmdsub` default to the stack top |
 | status | `_status` is updated after simple commands; `$?` reads it |
 | final status | `sys.exit(_status)` |
 
@@ -131,6 +132,11 @@ Important runtime conventions:
 external commands, `_echo(...) == 0`-style calls for builtins, or test expressions.
 `&&`/`||` map to Python `and`/`or` over boolean leaves, which gives the right short-circuit
 behaviour; the final status of such a list is collapsed to 0/1.
+
+Compound-command input redirection is emitted as an actual `with open(...)` wrapper around
+the generated block. The wrapper pushes the handle onto `_stdin_stack`; nested compound
+redirections push/pop in order. `read` now returns non-zero at EOF, which is what lets
+`while read line; do ...; done < file` terminate correctly.
 
 Exit statuses: a simple command/assignment/test/compound statement updates `_status`.
 A `while`/`for` loop leaves the last body command's status. An `if` without `else` gets an
@@ -145,7 +151,7 @@ All user-facing diagnostics derive from `TranspileError`:
   `for`, reserved words in the wrong position, malformed test expressions;
 * `CodegenError` — constructs the parser accepts but v2 cannot codegen (compound commands
   in `&&`/`||`, builtins other than `echo` in pipelines, complex command substitution,
-  unsupported redirections, invalid arithmetic).
+  compound-command output redirection, invalid arithmetic).
 
 Each message includes `filename:line:column` and the phase. The CLI exits with status 2
 and never prints partial output.
@@ -179,8 +185,8 @@ To add a new construct:
 4. Add tests at the relevant level (unit + golden + execution; differential when possible).
 5. Document the construct and any deviation from dash in `README.md`.
 
-Known next steps are listed in the README roadmap (functions, compound redirection,
-here-documents, `[[ ]]`, arrays, richer pipelines, `--ast`).
+Known next steps are listed in the README roadmap (functions, compound-command output
+redirection, here-documents, `[[ ]]`, arrays, richer pipelines, `--ast`).
 
 ## 8. 参考实现与取舍
 

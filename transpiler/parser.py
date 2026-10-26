@@ -270,15 +270,15 @@ class Parser:
         if tok.kind == TokenKind.WORD and tok.word is not None:
             text = tok.word.static_text()
             if text == "if":
-                return self._parse_if()
+                return self._attach_redirects(self._parse_if())
             if text == "while":
-                return self._parse_while(until=False)
+                return self._attach_redirects(self._parse_while(until=False))
             if text == "until":
-                return self._parse_while(until=True)
+                return self._attach_redirects(self._parse_while(until=True))
             if text == "for":
-                return self._parse_for()
+                return self._attach_redirects(self._parse_for())
             if text == "case":
-                return self._parse_case()
+                return self._attach_redirects(self._parse_case())
             if text in ("break", "continue"):
                 return self._parse_loop_control(text)
             if text in _RESERVED_WORDS:
@@ -292,6 +292,18 @@ class Parser:
             ):
                 raise self._error("shell function definitions are not supported", tok)
         return self._parse_simple_command()
+
+    def _attach_redirects(self, command: Command) -> Command:
+        """把复合命令结尾的重定向（如 ``done < file``）挂到命令节点上。"""
+        redirects: list[Redirect] = []
+        while True:
+            tok = self._peek()
+            if tok.kind != TokenKind.OP or tok.value not in _REDIRECT_OPS:
+                break
+            redirects.append(self._parse_redirect())
+        if redirects:
+            command.redirects.extend(redirects)  # type: ignore[attr-defined]
+        return command
 
     def _parse_loop_control(self, keyword: str) -> Command:
         """解析 ``break`` / ``continue``。

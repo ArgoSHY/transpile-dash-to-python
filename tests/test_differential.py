@@ -66,6 +66,11 @@ CASES = [
     pytest.param("echo before\nexit 7", {}, id="exit-status"),
     pytest.param('x="a b"\nfor y in $x; do echo "[$y]"; done', {}, id="word-splitting"),
     pytest.param("echo hello | cat", {}, id="echo-pipeline"),
+    pytest.param(
+        'while read line; do\necho "[$line]"\ndone < input.txt',
+        {"files": {"input.txt": "alpha\nbeta\n"}},
+        id="compound-redirection",
+    ),
 ]
 
 

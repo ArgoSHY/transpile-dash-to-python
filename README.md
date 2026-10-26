@@ -96,7 +96,7 @@ dependency is needed by the transpiler or by generated programs.
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
 | Lists / operators | `;`, newline, `&&`, `\|\|`, `\|` pipelines |
 | Pipelines | external commands and builtin `echo` (`echo hi \| grep h`); status is the last command's status |
-| Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2` on simple commands |
+| Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2` on simple commands; input redirection on compound commands (`while read ...; do ...; done < file`) |
 | Error reporting | typed `LexError` / `ParseError` / `CodegenError` with filename, line and column; no partial output |
 
 ## Deliberate differences from dash
@@ -104,7 +104,7 @@ dependency is needed by the transpiler or by generated programs.
 The transpiler is honest about being a subset. These are known differences:
 
 1. **Functions, subshells, background jobs, here-documents, arrays, brace expansion,
-   tilde expansion, `[[ ]]`, process substitution, `set -e/-u`, `shift`, `trap`, `eval`,
+   tilde expansion, `[[ ]]`, process substitution, `set -e/-u`, `trap`, `eval`,
    `source`, job control and arithmetic `for ((...))` are not implemented.** They raise a
    `TranspileError` instead of producing broken Python.
 2. **Command substitution** supports one simple command (no compound body, assignments or
@@ -112,8 +112,9 @@ The transpiler is honest about being a subset. These are known differences:
 3. **Pipelines** support external commands and builtin `echo`; other builtins (`cd`,
    `read`, `exit`, …) inside a pipeline are rejected. Per-stage redirections in a pipeline
    are not supported.
-4. **Redirection on compound commands** (`while ... done < file`, `if ... fi > log`) is not
-   supported; attach redirections to simple commands instead.
+4. **Output redirection on compound commands** (`if ... fi > log`) is not supported;
+   input redirection on compound commands is supported (`while read line; do ...; done < file`).
+   Attach other redirections to simple commands instead.
 5. **`$10` follows POSIX**: it is `${1}` followed by the literal `0`; use `${10}` for the
    tenth argument.
 6. **`$!`** expands to the empty string (no background-job support); `$-` is unsupported.
@@ -152,10 +153,10 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-274 passed, 20 skipped
+284 passed, 21 skipped
 ```
 
-The 20 skips are exactly the differential tests; on Linux the same suite runs them too.
+The 21 skips are exactly the differential tests; on Linux the same suite runs them too.
 
 The archived v1 suite still runs independently:
 
@@ -195,7 +196,7 @@ The old suite still imports the archived `legacy/trans.py` and can be run with
 ## Roadmap
 
 - shell functions with positional parameters and `return`
-- compound-command redirection and `while read line; do ...; done < file`
+- compound-command output redirection (`if ... fi > log`)
 - here-documents, `[[ ]]`, arrays and brace expansion
 - richer pipeline support (all builtins) and `pipefail`
 - an `--ast` debugging output and source spans on every AST node (commands already carry

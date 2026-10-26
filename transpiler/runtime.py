@@ -18,6 +18,8 @@ _status = 0
 _IFS_WHITESPACE = " \t\n"
 # 可变的位置参数列表：$1 对应 _ARGS[0]，shift 直接从这里弹出。
 _ARGS = list(_sys.argv[1:])
+# 复合命令重定向用的 stdin 栈；块结束时会 pop 掉。
+_stdin_stack = []
 
 
 def _argc():
@@ -264,8 +266,11 @@ def _cmdsub(argv):
     """简单外部命令的命令替换。"""
     if not argv:
         return ""
+    kwargs = {"text": True, "stdout": _subprocess.PIPE}
+    if _stdin_stack:
+        kwargs["stdin"] = _stdin_stack[-1]
     try:
-        result = _subprocess.run(list(argv), text=True, stdout=_subprocess.PIPE)
+        result = _subprocess.run(list(argv), **kwargs)
     except OSError:
         return ""
     return result.stdout.rstrip("\n")
@@ -282,9 +287,14 @@ def _run(argv, stdin_path=None, stdout_path=None, stdout_append=False,
         _sys.stderr.write("transpiler: empty command\n")
         return 127
     stdin_handle = stdout_handle = stderr_handle = None
+    stdin_owned = False
     try:
         if stdin_path is not None:
             stdin_handle = open(stdin_path, "r", encoding="utf-8")
+            stdin_owned = True
+        elif _stdin_stack:
+            # 复合命令重定向：块内命令默认共享同一个文件句柄，不能在这里关闭。
+            stdin_handle = _stdin_stack[-1]
         if stdout_path is not None:
             stdout_handle = open(stdout_path, "a" if stdout_append else "w", encoding="utf-8")
         if stderr_path is not None:
@@ -307,7 +317,9 @@ def _run(argv, stdin_path=None, stdout_path=None, stdout_append=False,
         _sys.stderr.write(f"{argv[0]}: {error}\n")
         return 126
     finally:
-        for handle in (stdin_handle, stdout_handle, stderr_handle):
+        if stdin_owned and stdin_handle is not None:
+            stdin_handle.close()
+        for handle in (stdout_handle, stderr_handle):
             if handle is not None:
                 handle.close()
 
@@ -350,7 +362,12 @@ def _pipeline(stages):
     try:
         for index, stage in enumerate(stages):
             argv = _pipeline_stage_argv(stage)
-            stdin = previous.stdout if previous is not None else None
+            if previous is not None:
+                stdin = previous.stdout
+            elif _stdin_stack:
+                stdin = _stdin_stack[-1]
+            else:
+                stdin = None
             stdout = _subprocess.PIPE if index < len(stages) - 1 else None
             try:
                 process = _subprocess.Popen(argv, stdin=stdin, stdout=stdout)
@@ -375,15 +392,20 @@ def _env(pairs):
 
 def _read_vars(names, stdin_path=None):
     handle = None
+    handle_owned = False
     try:
         if stdin_path is not None:
             handle = open(stdin_path, "r", encoding="utf-8")
-            line = handle.readline()
-        else:
-            line = _sys.stdin.readline()
+            handle_owned = True
+        elif _stdin_stack:
+            handle = _stdin_stack[-1]
+        line = handle.readline() if handle is not None else _sys.stdin.readline()
     finally:
-        if handle is not None:
+        if handle_owned and handle is not None:
             handle.close()
+    if line == "":
+        # EOF：read 返回非 0，while read 循环因此能正常结束。
+        return 1
     if line.endswith("\n"):
         line = line[:-1]
     fields = line.split()

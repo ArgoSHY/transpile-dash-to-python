@@ -120,6 +120,17 @@ CODEGEN_CASES = [
         "_status = _shift(1)\n_status = _shift('2')\n" + EXIT,
         id="shift",
     ),
+    pytest.param(
+        'while read line; do\necho "line:$line"\ndone < input.txt',
+        "with open('input.txt', 'r', encoding='utf-8') as _dsh_stdin_1:\n"
+        "    _stdin_stack.append(_dsh_stdin_1)\n"
+        "    try:\n"
+        "        while _ok(_read_vars(['line'])):\n"
+        "            _status = _echo(_words((('q', 'line:'), ('P', _get('line')),)))\n"
+        "    finally:\n"
+        "        _stdin_stack.pop()\n" + EXIT,
+        id="compound-input-redirection",
+    ),
 ]
 
 
@@ -140,6 +151,7 @@ SYNTAX_CASES = [
     'echo "a\\tb"',
     "for i in 1 2; do\nif [ $i -eq 1 ]; then continue; fi\nbreak\ndone",
     "while [ $# -gt 0 ]; do\necho $1\nshift\ndone",
+    "while read line; do\necho $line\ndone < input.txt",
 ]
 
 
