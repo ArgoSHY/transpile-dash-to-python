@@ -137,6 +137,11 @@ CODEGEN_CASES = [
         "('grep', ['hello']), ('wc', ['-l'])])\n" + EXIT,
         id="python-pipeline-builtins",
     ),
+    pytest.param(
+        "set -e\necho hi",
+        "_errexit = True\n_status = 0\n_status = _echo(['hi'])\n_check_errexit()\n" + EXIT,
+        id="set-e",
+    ),
 ]
 
 
@@ -159,6 +164,8 @@ SYNTAX_CASES = [
     "while [ $# -gt 0 ]; do\necho $1\nshift\ndone",
     "while read line; do\necho $line\ndone < input.txt",
     "echo hello | grep hello | wc -l",
+    "set -e\nfalse\necho after",
+    "set +e\nfalse\necho after",
 ]
 
 

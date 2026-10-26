@@ -90,7 +90,7 @@ dependency is needed by the transpiler or by generated programs.
 | Globbing | unquoted `*`, `?`, `[...]` expanded with `glob`; quoted patterns stay literal |
 | Word splitting | unquoted expansions split on space/tab/newline; quoted expansions do not |
 | Simple commands | external commands via `subprocess.run`; prefix assignments passed as environment |
-| Builtins | `echo` (`-n`, `-e`, `-E`), `cd`, `read` (`-r` accepted), `shift [n]`, `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
+| Builtins | `echo` (`-n`, `-e`, `-E`), `cd`, `read` (`-r` accepted), `shift [n]`, `set -e`/`set +e`, `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
 | Control flow | `if/elif/else/fi`, `while/do/done`, `until/do/done`, `for NAME in ...; do ...; done`, `for NAME; do ...; done`, `break`, `continue`（暂不支持层数参数） |
 | `case` | patterns with `\|` alternation, `*` globs, `*)` default, optional final `;;` |
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
@@ -104,7 +104,7 @@ dependency is needed by the transpiler or by generated programs.
 The transpiler is honest about being a subset. These are known differences:
 
 1. **Functions, subshells, background jobs, here-documents, arrays, brace expansion,
-   tilde expansion, `[[ ]]`, process substitution, `set -e/-u`, `trap`, `eval`,
+   tilde expansion, `[[ ]]`, process substitution, `set -u`, `trap`, `eval`,
    `source`, job control and arithmetic `for ((...))` are not implemented.** They raise a
    `TranspileError` instead of producing broken Python.
 2. **Command substitution** supports one simple command (no compound body, assignments or
@@ -128,6 +128,8 @@ The transpiler is honest about being a subset. These are known differences:
    `\0nnn`). This matches dash rather than bash's default.
 10. **Status tracking is simplified**: `$?` after a simple or external command is the real
     exit status, but the status of a whole `&&`/`||` list is collapsed to 0/1.
+    `set -e`/`set +e` is supported for the common cases: failures in `if`/`while`/`until`
+    conditions are ignored, but a failing `&&`/`||` list may exit more eagerly than dash.
 11. **`read`** splits on whitespace; `-r` is accepted but backslash processing is not
     modelled. The last named variable receives the remainder of the line.
 12. **Internal names** (`_status`, `_echo`, `_get`, …) are reserved; avoid using them as
@@ -155,7 +157,7 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-297 passed, 23 skipped
+311 passed, 24 skipped
 ```
 
 The 21 skips are exactly the differential tests; on Linux the same suite runs them too.

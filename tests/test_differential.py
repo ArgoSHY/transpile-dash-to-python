@@ -73,6 +73,7 @@ CASES = [
     ),
     pytest.param('echo "a\\nb\\nc" | grep b', {}, id="python-grep-pipeline"),
     pytest.param('echo "a\\nb\\nc" | wc -l', {}, id="python-wc-pipeline"),
+    pytest.param("set -e\necho before\nfalse\necho after", {}, id="set-e"),
 ]
 
 

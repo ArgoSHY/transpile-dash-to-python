@@ -20,6 +20,8 @@ _IFS_WHITESPACE = " \t\n"
 _ARGS = list(_sys.argv[1:])
 # 复合命令重定向用的 stdin 栈；块结束时会 pop 掉。
 _stdin_stack = []
+# set -e / set +e 控制的 errexit 开关。
+_errexit = False
 
 
 def _argc():
@@ -278,6 +280,12 @@ def _cmdsub(argv):
 
 def _ok(code):
     return code == 0
+
+
+def _check_errexit():
+    """set -e 生效且上一条命令失败时，以该状态退出脚本。"""
+    if _errexit and _status != 0:
+        raise SystemExit(_status)
 
 
 def _run(argv, stdin_path=None, stdout_path=None, stdout_append=False,

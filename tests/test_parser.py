@@ -12,6 +12,7 @@ from transpiler.ast import (
     ContinueCommand,
     ForCommand,
     IfCommand,
+    SetCommand,
     SimpleCommand,
     TestAnd,
     TestBinary,
@@ -198,6 +199,18 @@ def test_command_nodes_carry_source_position():
         parse("for i in 1; do :; done").body[0].first.commands[0],
     ]
     assert [(command.line, command.col) for command in commands] == [(2, 1), (1, 1), (1, 1)]
+
+
+def test_set_errexit_forms():
+    for source, expected in [
+        ("set -e", True),
+        ("set +e", False),
+        ("set -o errexit", True),
+        ("set +o errexit", False),
+    ]:
+        command = script(source)[0].first.commands[0]
+        assert isinstance(command, SetCommand)
+        assert command.errexit is expected
 
 
 def test_compound_command_redirections():

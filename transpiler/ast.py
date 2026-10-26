@@ -139,6 +139,15 @@ class ContinueCommand(Command):
     col: int = 1
 
 
+@dataclass
+class SetCommand(Command):
+    """``set -e`` / ``set +e``：切换 errexit 行为。"""
+
+    errexit: bool = False
+    line: int = 1
+    col: int = 1
+
+
 # --------------------------------------------------------------------- 程序结构
 @dataclass(slots=True)
 class Pipeline:
@@ -183,6 +192,7 @@ __all__ = [
     "CaseCommand",
     "BreakCommand",
     "ContinueCommand",
+    "SetCommand",
     "Pipeline",
     "AndOr",
     "Comment",

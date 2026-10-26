@@ -23,6 +23,7 @@ from .ast import (
     Pipeline,
     Redirect,
     Script,
+    SetCommand,
     SimpleCommand,
     Stmt,
     TestAnd,
@@ -111,13 +112,52 @@ class CodeGenerator:
         self.loop_depth = 0
         # 复合命令重定向的 with 变量需要唯一名字，避免嵌套时互相覆盖。
         self.redirect_counter = 0
+        # 只有脚本里出现 set -e/+e 时才生成 _check_errexit()，避免给普通脚本
+        # 增加无意义的运行时调用（也保持旧 golden 输出稳定）。
+        self.errexit_checks = False
 
     # ------------------------------------------------------------------ 对外接口
     def generate(self, script: Script) -> str:
         """生成除 runtime prelude 之外的 Python 语句，末尾补上退出状态。"""
+        self.errexit_checks = self._body_uses_errexit(script.body)
         self._emit_body(script.body)
         self.writer.line("_sys.exit(_status)")
         return "\n".join(self.writer.lines) + "\n"
+
+    def _body_uses_errexit(self, body: list[Stmt]) -> bool:
+        for node in body:
+            if not isinstance(node, AndOr):
+                continue
+            if self._pipeline_uses_errexit(node.first):
+                return True
+            if any(self._pipeline_uses_errexit(pipeline) for _, pipeline in node.rest):
+                return True
+        return False
+
+    def _pipeline_uses_errexit(self, pipeline: Pipeline | None) -> bool:
+        if pipeline is None:
+            return False
+        return any(self._command_uses_errexit(command) for command in pipeline.commands)
+
+    def _command_uses_errexit(self, command: Command) -> bool:
+        if isinstance(command, SetCommand):
+            return True
+        if isinstance(command, IfCommand):
+            return any(
+                self._body_uses_errexit(branch_body) for _, branch_body in command.branches
+            ) or self._body_uses_errexit(command.else_body)
+        if isinstance(command, WhileCommand):
+            return self._body_uses_errexit(command.body)
+        if isinstance(command, ForCommand):
+            return self._body_uses_errexit(command.body)
+        if isinstance(command, CaseCommand):
+            return any(self._body_uses_errexit(item_body) for _, item_body in command.items)
+        return False
+
+    def _emit_errexit_check(self) -> None:
+        """在可能需要触发 set -e 的语句后生成运行时检查。"""
+        if self.errexit_checks:
+            self.writer.line("_check_errexit()")
 
     def _error_for(self, message: str, command: Command) -> CodegenError:
         """构造带命令位置的代码生成错误。"""
@@ -144,15 +184,21 @@ class CodeGenerator:
         if node.rest:
             expression = self._condition_expr(node)
             self.writer.line(f"_status = 0 if ({expression}) else 1")
+            self._emit_errexit_check()
             return
         pipeline = node.first
         if pipeline is None or not pipeline.commands:
             self.writer.line("_status = 0")
             return
         if len(pipeline.commands) == 1:
-            self._emit_command(pipeline.commands[0])
+            command = pipeline.commands[0]
+            self._emit_command(command)
+            # 复合命令/break/continue 内部各语句已经带了检查；set 自身不检查。
+            if isinstance(command, SimpleCommand) and not isinstance(command, SetCommand):
+                self._emit_errexit_check()
         else:
             self.writer.line(f"_status = {self._pipeline_expr(pipeline)}")
+            self._emit_errexit_check()
 
     def _emit_command(self, command: Command) -> None:
         emitter_name = _COMMAND_EMITTERS.get(type(command))
@@ -290,6 +336,11 @@ class CodeGenerator:
         if self.loop_depth == 0:
             raise self._error_for("'continue' outside a loop", command)
         self.writer.line("continue")
+
+    @_emits(SetCommand)
+    def _emit_set(self, command: SetCommand) -> None:
+        self.writer.line(f"_errexit = {command.errexit!r}")
+        self.writer.line("_status = 0")
 
     # ------------------------------------------------------------------ 简单命令
     @_emits(SimpleCommand)

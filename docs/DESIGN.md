@@ -125,6 +125,7 @@ Important runtime conventions:
 | pipeline | `_pipeline([stage, ...])`; a stage is an argv list, `('echo', args, newline, escapes)`, `('grep', argv)` or `('wc', argv)`. Stages run sequentially and pass data in memory; external stages use `subprocess.run` |
 | test expression | `_test_unary(op, value)` / `_test_binary(op, left, right)` |
 | compound input redirection | generated `with open(path) as _dsh_stdin_N:` plus `_stdin_stack.append/pop`; `_run`, `_read_vars`, `_pipeline`, `_cmdsub` default to the stack top |
+| `set -e` | emitted as `_errexit = True/False`; scripts that use `set` call `_check_errexit()` after statements, which exits on a non-zero `_status` |
 | status | `_status` is updated after simple commands; `$?` reads it |
 | final status | `sys.exit(_status)` |
 
@@ -141,6 +142,11 @@ redirections push/pop in order. `read` now returns non-zero at EOF, which is wha
 Exit statuses: a simple command/assignment/test/compound statement updates `_status`.
 A `while`/`for` loop leaves the last body command's status. An `if` without `else` gets an
 implicit `else: _status = 0`, matching the shell's "no branch taken" result.
+
+`_check_errexit()` is emitted only for scripts that contain `set -e`/`set +e` (detected by
+a small AST scan), so ordinary generated programs keep their previous output. The check is
+placed after simple commands, pipelines and `&&`/`||` lists; condition lists are exempt, as
+in POSIX. Failures inside `&&`/`||` lists are simplified to the list's 0/1 status.
 
 ## 5. Errors
 

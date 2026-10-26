@@ -36,6 +36,7 @@ from .ast import (
     Pipeline,
     Redirect,
     Script,
+    SetCommand,
     SimpleCommand,
     Stmt,
     TestAnd,
@@ -281,6 +282,8 @@ class Parser:
                 return self._attach_redirects(self._parse_case())
             if text in ("break", "continue"):
                 return self._parse_loop_control(text)
+            if text == "set":
+                return self._parse_set()
             if text in _RESERVED_WORDS:
                 raise self._error(f"unexpected reserved word {text!r}")
             # 函数定义暂不支持；提前识别并给出明确错误，避免被当成普通命令。
@@ -304,6 +307,30 @@ class Parser:
         if redirects:
             command.redirects.extend(redirects)  # type: ignore[attr-defined]
         return command
+
+    def _parse_set(self) -> SetCommand:
+        """解析 ``set -e`` / ``set +e`` / ``set -o errexit`` / ``set +o errexit``。"""
+        token = self._advance()
+        arguments: list[str] = []
+        while self._peek().kind == TokenKind.WORD and self._peek().word is not None:
+            arguments.append(self._peek().word.static_text() or "")
+            self._advance()
+        if len(arguments) == 1 and arguments[0] in ("-e", "+e"):
+            return SetCommand(
+                errexit=arguments[0] == "-e",
+                line=token.line,
+                col=token.col,
+            )
+        if len(arguments) == 2 and arguments[0] in ("-o", "+o") and arguments[1] == "errexit":
+            return SetCommand(
+                errexit=arguments[0] == "-o",
+                line=token.line,
+                col=token.col,
+            )
+        raise self._error(
+            "unsupported set options; v2 supports set -e / set +e",
+            token,
+        )
 
     def _parse_loop_control(self, keyword: str) -> Command:
         """解析 ``break`` / ``continue``。

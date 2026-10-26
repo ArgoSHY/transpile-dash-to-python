@@ -634,3 +634,53 @@ def test_external_command_uses_compound_redirected_stdin(run_shell):
 def test_read_returns_failure_at_eof(run_shell):
     result = run_shell('read x < empty.txt\necho "status=$?"', files={"empty.txt": ""})
     assert result.stdout == "status=1\n"
+
+
+def test_set_e_exits_on_command_failure(run_shell):
+    result = run_shell("set -e\necho before\nfalse\necho after")
+    assert result.stdout == "before\n"
+    assert result.returncode == 1
+
+
+def test_set_plus_e_disables_errexit(run_shell):
+    result = run_shell("set +e\nfalse\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_can_be_disabled_again(run_shell):
+    result = run_shell("set -e\nfalse || true\nset +e\nfalse\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_ignores_failures_in_conditions(run_shell):
+    result = run_shell("set -e\nif false; then echo no; fi\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_exits_on_pipeline_failure(run_shell):
+    result = run_shell("set -e\necho hi | grep missing\necho after")
+    assert result.stdout == ""
+    assert result.returncode == 1
+
+
+def test_set_e_allows_successful_or_list(run_shell):
+    result = run_shell("set -e\nfalse || true\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
+
+
+def test_set_e_exits_inside_loop_body(run_shell):
+    result = run_shell(
+        "set -e\nfor i in 1 2 3; do\nif [ $i -eq 2 ]; then false; fi\necho $i\ndone\necho after"
+    )
+    assert result.stdout == "1\n"
+    assert result.returncode == 1
+
+
+def test_set_e_success_continues(run_shell):
+    result = run_shell("set -e\ntrue\necho after")
+    assert result.stdout == "after\n"
+    assert result.returncode == 0
