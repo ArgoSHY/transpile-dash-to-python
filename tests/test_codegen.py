@@ -115,6 +115,11 @@ CODEGEN_CASES = [
         "while True:\n    continue\n" + EXIT,
         id="continue-in-while",
     ),
+    pytest.param(
+        "shift\nshift 2",
+        "_status = _shift(1)\n_status = _shift('2')\n" + EXIT,
+        id="shift",
+    ),
 ]
 
 
@@ -134,6 +139,7 @@ SYNTAX_CASES = [
     "false && echo yes || echo no",
     'echo "a\\tb"',
     "for i in 1 2; do\nif [ $i -eq 1 ]; then continue; fi\nbreak\ndone",
+    "while [ $# -gt 0 ]; do\necho $1\nshift\ndone",
 ]
 
 

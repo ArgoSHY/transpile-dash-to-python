@@ -16,20 +16,26 @@ import sys as _sys
 
 _status = 0
 _IFS_WHITESPACE = " \t\n"
+# 可变的位置参数列表：$1 对应 _ARGS[0]，shift 直接从这里弹出。
+_ARGS = list(_sys.argv[1:])
 
 
 def _argc():
-    return max(len(_sys.argv) - 1, 0)
+    return len(_ARGS)
 
 
 def _argv():
-    return list(_sys.argv[1:])
+    return list(_ARGS)
 
 
 def _arg(number):
     index = int(number)
-    if 0 <= index < len(_sys.argv):
-        return _sys.argv[index]
+    if index == 0:
+        # $0 是脚本名，不参与 shift。
+        return _sys.argv[0]
+    index -= 1
+    if 0 <= index < len(_ARGS):
+        return _ARGS[index]
     return ""
 
 
@@ -64,10 +70,24 @@ def _int(name):
 
 def _is_set(name):
     if name.isdigit():
-        return 0 < int(name) < len(_sys.argv)
+        return 0 <= int(name) <= len(_ARGS)
     if name in ("#", "?", "$", "@", "*"):
         return True
     return name in globals()
+
+
+def _shift(count="1"):
+    """弹出前 ``count`` 个位置参数；失败时返回 1 且不改动参数。"""
+    try:
+        value = int(str(count))
+    except ValueError:
+        _sys.stderr.write(f"shift: {count}: illegal number\n")
+        return 1
+    if value < 0 or value > len(_ARGS):
+        _sys.stderr.write("shift: shift count out of range\n")
+        return 1
+    del _ARGS[:value]
+    return 0
 
 
 def _assign(parts):

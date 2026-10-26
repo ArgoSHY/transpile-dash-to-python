@@ -441,6 +441,48 @@ def test_continue_in_while_loop(run_shell):
     assert result.stdout == "1\n3\n4\n"
 
 
+def test_shift_updates_positional_parameters(run_shell):
+    result = run_shell(
+        'echo "before=$#:$1"\nshift\necho "after=$#:$1"',
+        args=("a", "b"),
+    )
+    assert result.stdout == "before=2:a\nafter=1:b\n"
+
+
+def test_shift_loop_over_all_arguments(run_shell):
+    result = run_shell(
+        "while [ $# -gt 0 ]; do\necho $1\nshift\ndone",
+        args=("a", "b", "c"),
+    )
+    assert result.stdout == "a\nb\nc\n"
+
+
+def test_shift_multiple_arguments(run_shell):
+    result = run_shell(
+        'echo "before=$#:$1"\nshift 2\necho "after=$#:$1"',
+        args=("a", "b", "c"),
+    )
+    assert result.stdout == "before=3:a\nafter=1:c\n"
+
+
+def test_shift_too_many_returns_failure_without_changing_args(run_shell):
+    result = run_shell(
+        'shift 5\necho "status=$? count=$# first=$1"',
+        args=("a", "b"),
+    )
+    assert result.stdout == "status=1 count=2 first=a\n"
+
+
+def test_shift_then_all_arguments(run_shell):
+    result = run_shell('shift\necho "$@"', args=("a", "b"))
+    assert result.stdout == "b\n"
+
+
+def test_shift_invalid_count_returns_failure(run_shell):
+    result = run_shell('shift nope\necho "status=$?"', args=("a",))
+    assert result.stdout == "status=1\n"
+
+
 def test_break_only_exits_inner_loop(run_shell):
     result = run_shell(
         "for i in 1 2; do\n"

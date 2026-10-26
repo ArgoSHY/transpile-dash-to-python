@@ -31,6 +31,7 @@ from transpiler.errors import CodegenError, LexError, ParseError, TranspileError
         ("if true; then echo x; fi && echo y", CodegenError, "&&"),
         ("break", CodegenError, "outside a loop"),
         ("continue", CodegenError, "outside a loop"),
+        ("shift 1 2", CodegenError, "at most one argument"),
     ],
 )
 def test_unsupported_constructs_raise_typed_errors(source, expected_type, message):

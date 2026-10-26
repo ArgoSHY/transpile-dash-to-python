@@ -46,7 +46,7 @@ from .tokens import (
 )
 
 _BUILTINS = frozenset(
-    {"echo", "cd", "exit", "read", "true", "false", ":", "pwd", "export", "unset"}
+    {"echo", "cd", "exit", "read", "shift", "true", "false", ":", "pwd", "export", "unset"}
 )
 _GLOB_CHARS = "*?["
 _ALL_REDIRECT_KEYS = frozenset(
@@ -273,6 +273,8 @@ class CodeGenerator:
             self.writer.line(f"_exit({arguments})")
         elif name == "read":
             self._emit_read(command)
+        elif name == "shift":
+            self.writer.line(f"_status = _shift({self._shift_count_expr(command)})")
         elif name == "export":
             self.writer.line(f"_status = _export({self._argv_expr(command.words[1:])})")
         elif name == "unset":
@@ -293,6 +295,12 @@ class CodeGenerator:
     def _emit_assignments(self, assignments: list[Assignment]) -> None:
         for assignment in assignments:
             self.writer.line(f"{assignment.name} = {self._value_expr(assignment.value)}")
+
+    def _shift_count_expr(self, command: SimpleCommand) -> str:
+        """把 ``shift [n]`` 的 n 转成表达式；最多允许一个参数。"""
+        if len(command.words) > 2:
+            raise self._error_for("shift takes at most one argument", command)
+        return self._value_expr(command.words[1]) if len(command.words) == 2 else "1"
 
     def _echo_flags(self, command: SimpleCommand) -> tuple[bool, bool, int]:
         """返回 ``(是否换行, 是否处理反斜杠转义, 消耗的选项个数)``。"""
@@ -489,6 +497,8 @@ class CodeGenerator:
             return "True"
         if name == "pwd":
             return "_ok(_pwd())"
+        if name == "shift":
+            return f"_ok(_shift({self._shift_count_expr(command)}))"
         if name == "read":
             raise self._error_for("'read' in a condition is not supported", command)
         if name == "exit":
