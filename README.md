@@ -86,18 +86,18 @@ dependency is needed by the transpiler or by generated programs.
 |---|---|
 | Comments / shebang | `#` comments; `#!/bin/dash` ignored (the generated program has its own Python shebang) |
 | Quoting | single quotes, double quotes, backslash escapes, line continuation, empty quoted words |
-| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${#var}`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants; string patterns `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`, `${var/old/new}`, `${var//old/new}` |
+| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${#var}`, `${var:offset}`, `${var:offset:length}`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants; string patterns `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`, `${var/old/new}`, `${var//old/new}` |
 | Command substitution | `$(simple command)` and `` `simple command` `` (trailing newlines stripped) |
 | Arithmetic | `$((...))` with `+ - * / % ** << >> & \| ^ ~ ! && \|\| == != < <= > >= ?:` and variables; integer division maps to `//` |
 | Globbing | unquoted `*`, `?`, `[...]` expanded with `glob`; quoted patterns stay literal |
 | Word splitting | unquoted expansions split on the current `IFS` (default space/tab/newline); quoted expansions do not; `IFS=,` also drives `read` and `$*` joining |
 | Simple commands | external commands via `subprocess.run`; prefix assignments passed as environment |
-| Builtins | `echo` (`-n`, `-e`, `-E`), `cd`, `read` (`-r` accepted), `shift [n]`, `set -e`/`set +e`, `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
+| Builtins | `echo` (`-n`, `-e`, `-E`), `printf`, `cd`, `read` (`-r` accepted), `shift [n]`, `set -e`/`set +e`, `set -- args...`, `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
 | Control flow | `if/elif/else/fi`, `while/do/done`, `until/do/done`, `for NAME in ...; do ...; done`, `for NAME; do ...; done`, `break`, `continue`（暂不支持层数参数） |
 | `case` | patterns with `\|` alternation, `*` globs, `*)` default, optional final `;;` |
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
 | Lists / operators | `;`, newline, `&&`, `\|\|`, `\|` pipelines |
-| Pipelines | external commands plus pure-Python stages `echo`, `grep` (`-i/-v/-c/-n/-q/-F`), `wc` (`-l/-w/-c`), `true`/`false`/`:`; status is the last command's status |
+| Pipelines | external commands plus pure-Python stages `echo`, `printf`, `grep` (`-i/-v/-c/-n/-q/-F`), `wc` (`-l/-w/-c`), `true`/`false`/`:`; status is the last command's status |
 | Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2`, `>&2` on simple commands; input redirection on compound commands (`while read ...; do ...; done < file`) |
 | Error reporting | typed `LexError` / `ParseError` / `CodegenError` with filename, line and column; no partial output |
 
@@ -129,17 +129,18 @@ The transpiler is honest about being a subset. These are known differences:
    adjacent text is approximated by joining the arguments with spaces.
 9. **`echo` interprets dash-style backslash escapes by default** (`\n`, `\t`, `\c`, octal
    `\0nnn`). This matches dash rather than bash's default.
-10. **Status tracking is simplified**: `$?` after a simple or external command is the real
-    exit status, but the status of a whole `&&`/`||` list is collapsed to 0/1.
-    `set -e`/`set +e` is supported for the common cases: failures in `if`/`while`/`until`
-    conditions are ignored, but a failing `&&`/`||` list may exit more eagerly than dash.
+10. **`&&`/`||` lists preserve the real status of the last executed command** and short-
+    circuit left-to-right. `set -e`/`set +e` ignores failures in `if`/`while`/`until`
+    conditions and in non-final `&&`/`||` commands, matching the common POSIX cases; a
+    compound command that fails as the final list member still triggers `set -e`.
 11. **`read`** splits using the current `IFS`; `-r` is accepted but backslash processing is
     not modelled. The last named variable receives the remainder of the line (joined by the
     first non-whitespace IFS character).
 12. **Internal names** (`_status`, `_echo`, `_get`, …) are reserved; avoid using them as
     shell variable names in transpiled scripts.
-13. **`${var:offset:length}` substring expansion is not implemented** (string length
-    `${#var}` is).
+13. **`printf`** implements the common `%s`, `%b`, `%d`, `%i`, `%u`, `%o`, `%x`, `%X`,
+    `%c`, `%f`/`%e`/`%g` conversions with flags/width/precision; `%q`, `*` width and `-v`
+    are not implemented.
 14. **Python 3.10+** is required to run the generated program.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the grammar, expansion model and design rationale.
@@ -163,10 +164,10 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-333 passed, 29 skipped
+374 passed, 35 skipped
 ```
 
-The 21 skips are exactly the differential tests; on Linux the same suite runs them too.
+The 35 skips are exactly the differential tests; on Linux the same suite runs them too.
 
 The archived v1 suite still runs independently:
 
@@ -205,8 +206,6 @@ The old suite still imports the archived `legacy/trans.py` and can be run with
 
 ## Roadmap
 
-- `${var:offset:length}` substring expansion
-- `set --` / resetting positional parameters
 - shell functions with positional parameters and `return`
 - compound-command output redirection (`if ... fi > log`)
 - here-documents, `[[ ]]`, arrays and brace expansion
