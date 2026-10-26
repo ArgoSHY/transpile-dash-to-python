@@ -62,7 +62,9 @@ statements.
 ## Development environment
 
 The project uses [uv](https://docs.astral.sh/uv/) and pins its development dependencies in
-`pyproject.toml` + `uv.lock` (pytest, ruff). Python 3.10+ is required.
+`pyproject.toml` + `uv.lock` (pytest, ruff). Python 3.10+ is required. `uv.toml` keeps the
+uv cache inside the project (`.uv-cache/`), so `uv run ...` also works in environments that
+cannot write the user-level uv cache directory.
 
 ```bash
 # create/update .venv and install dev dependencies
