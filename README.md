@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # transpile-dash-to-python v2
 
 A small, grammar-driven transpiler from a documented **dash/POSIX-shell subset** to
@@ -111,11 +113,11 @@ The transpiler is honest about being a subset. These are known differences:
    `TranspileError` instead of producing broken Python.
 2. **Command substitution** supports one simple command (no compound body, assignments or
    redirections inside `$(...)`).
-3. **Pipelines** support external commands plus builtin `echo`, `grep` and `wc`; other
-   builtins (`cd`, `read`, `exit`, …) inside a pipeline are rejected. Per-stage
-   redirections in a pipeline are not supported. `grep`/`wc` are implemented in Python
-   (regex syntax is Python's, a close approximation of POSIX BRE) and do not spawn
-   external processes.
+3. **Pipelines** support external commands plus builtin `echo`, `printf`, `grep`, `wc`,
+   `true`/`false`/`:`; other builtins (`cd`, `read`, `exit`, …) inside a pipeline are
+   rejected. Per-stage redirections in a pipeline are not supported. `printf`, `grep`
+   and `wc` are implemented in Python (grep's regex syntax is Python's, a close
+   approximation of POSIX BRE) and do not spawn external processes.
 4. **Output redirection on compound commands** (`if ... fi > log`) is not supported;
    input redirection on compound commands is supported (`while read line; do ...; done < file`).
    Attach other redirections to simple commands instead.
@@ -179,7 +181,9 @@ uv run pytest legacy/tests -q     # 208 passed
 
 ```
 trans.py                  CLI entry point
+README.zh-CN.md           Chinese README
 pyproject.toml            project metadata, dev dependencies, pytest/ruff config
+uv.toml                   uv cache configuration (project-local)
 uv.lock                   locked development environment
 transpiler/
   lexer.py                quote-aware lexer
