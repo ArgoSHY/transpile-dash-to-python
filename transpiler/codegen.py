@@ -13,9 +13,11 @@ from . import arith
 from .ast import (
     AndOr,
     Assignment,
+    BreakCommand,
     CaseCommand,
     Command,
     Comment,
+    ContinueCommand,
     ForCommand,
     IfCommand,
     Pipeline,
@@ -104,6 +106,8 @@ class CodeGenerator:
     def __init__(self, filename: str = "<script>"):
         self.filename = filename
         self.writer = _Writer()
+        # 记录当前嵌套在几层循环里，用于校验 break/continue 的合法性。
+        self.loop_depth = 0
 
     # ------------------------------------------------------------------ 对外接口
     def generate(self, script: Script) -> str:
@@ -190,9 +194,13 @@ class CodeGenerator:
         else:
             self.writer.line(f"while {condition}:")
         self.writer.indent()
-        self._emit_body(command.body)
-        if not command.body:
-            self.writer.line("pass")
+        self.loop_depth += 1
+        try:
+            self._emit_body(command.body)
+            if not command.body:
+                self.writer.line("pass")
+        finally:
+            self.loop_depth -= 1
         self.writer.dedent()
 
     @_emits(ForCommand)
@@ -203,9 +211,13 @@ class CodeGenerator:
             iterable = self._argv_expr(command.words)
         self.writer.line(f"for {command.var} in {iterable}:")
         self.writer.indent()
-        self._emit_body(command.body)
-        if not command.body:
-            self.writer.line("pass")
+        self.loop_depth += 1
+        try:
+            self._emit_body(command.body)
+            if not command.body:
+                self.writer.line("pass")
+        finally:
+            self.loop_depth -= 1
         self.writer.dedent()
 
     @_emits(CaseCommand)
@@ -227,6 +239,18 @@ class CodeGenerator:
             self.writer.dedent()
         else:
             self.writer.line("_status = 0")
+
+    @_emits(BreakCommand)
+    def _emit_break(self, command: BreakCommand) -> None:
+        if self.loop_depth == 0:
+            raise self._error_for("'break' outside a loop", command)
+        self.writer.line("break")
+
+    @_emits(ContinueCommand)
+    def _emit_continue(self, command: ContinueCommand) -> None:
+        if self.loop_depth == 0:
+            raise self._error_for("'continue' outside a loop", command)
+        self.writer.line("continue")
 
     # ------------------------------------------------------------------ 简单命令
     @_emits(SimpleCommand)

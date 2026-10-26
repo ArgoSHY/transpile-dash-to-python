@@ -105,6 +105,16 @@ CODEGEN_CASES = [
         "_status = _echo(['hi'])\n" + EXIT,
         id="shebang-stripped",
     ),
+    pytest.param(
+        "for i in 1 2; do\nbreak\ndone",
+        "for i in ['1', '2']:\n    break\n" + EXIT,
+        id="break-in-for",
+    ),
+    pytest.param(
+        "while true; do\ncontinue\ndone",
+        "while True:\n    continue\n" + EXIT,
+        id="continue-in-while",
+    ),
 ]
 
 
@@ -123,6 +133,7 @@ SYNTAX_CASES = [
     "python a.py | python b.py",
     "false && echo yes || echo no",
     'echo "a\\tb"',
+    "for i in 1 2; do\nif [ $i -eq 1 ]; then continue; fi\nbreak\ndone",
 ]
 
 

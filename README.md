@@ -91,7 +91,7 @@ dependency is needed by the transpiler or by generated programs.
 | Word splitting | unquoted expansions split on space/tab/newline; quoted expansions do not |
 | Simple commands | external commands via `subprocess.run`; prefix assignments passed as environment |
 | Builtins | `echo` (`-n`, `-e`, `-E`), `cd`, `read` (`-r` accepted), `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
-| Control flow | `if/elif/else/fi`, `while/do/done`, `until/do/done`, `for NAME in ...; do ...; done`, `for NAME; do ...; done` |
+| Control flow | `if/elif/else/fi`, `while/do/done`, `until/do/done`, `for NAME in ...; do ...; done`, `for NAME; do ...; done`, `break`, `continue`（暂不支持层数参数） |
 | `case` | patterns with `\|` alternation, `*` globs, `*)` default, optional final `;;` |
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
 | Lists / operators | `;`, newline, `&&`, `\|\|`, `\|` pipelines |
@@ -152,7 +152,7 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-237 passed, 20 skipped
+249 passed, 20 skipped
 ```
 
 The 20 skips are exactly the differential tests; on Linux the same suite runs them too.

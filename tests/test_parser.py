@@ -6,8 +6,10 @@ import pytest
 
 from transpiler.ast import (
     AndOr,
+    BreakCommand,
     CaseCommand,
     Comment,
+    ContinueCommand,
     ForCommand,
     IfCommand,
     SimpleCommand,
@@ -168,12 +170,24 @@ def test_comments_are_preserved():
         ("if [ -f x ]]; then echo y; fi", "closing ']'"),
         ("if [ a b ]; then echo y; fi", "unexpected test argument"),
         ("echo hi ;;", "outside a case branch"),
+        ("while true; do break 2; done", "loop level"),
     ],
 )
 def test_parse_errors(source, message):
     with pytest.raises(ParseError) as error:
         parse(source)
     assert message in str(error.value)
+
+
+def test_break_and_continue_nodes():
+    """循环体里的 break/continue 解析成独立 AST 节点。"""
+    loop = script("while true; do\nbreak\ncontinue\ndone")[0].first.commands[0]
+    assert isinstance(loop, WhileCommand)
+    break_command = loop.body[0].first.commands[0]
+    continue_command = loop.body[1].first.commands[0]
+    assert isinstance(break_command, BreakCommand)
+    assert isinstance(continue_command, ContinueCommand)
+    assert (break_command.line, break_command.col) == (2, 1)
 
 
 def test_command_nodes_carry_source_position():

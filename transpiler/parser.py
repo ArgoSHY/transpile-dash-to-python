@@ -26,9 +26,11 @@ import re
 from .ast import (
     AndOr,
     Assignment,
+    BreakCommand,
     CaseCommand,
     Command,
     Comment,
+    ContinueCommand,
     ForCommand,
     IfCommand,
     Pipeline,
@@ -277,6 +279,8 @@ class Parser:
                 return self._parse_for()
             if text == "case":
                 return self._parse_case()
+            if text in ("break", "continue"):
+                return self._parse_loop_control(text)
             if text in _RESERVED_WORDS:
                 raise self._error(f"unexpected reserved word {text!r}")
             # 函数定义暂不支持；提前识别并给出明确错误，避免被当成普通命令。
@@ -288,6 +292,21 @@ class Parser:
             ):
                 raise self._error("shell function definitions are not supported", tok)
         return self._parse_simple_command()
+
+    def _parse_loop_control(self, keyword: str) -> Command:
+        """解析 ``break`` / ``continue``。
+
+        POSIX 允许 ``break n`` / ``continue n`` 跳出多层循环；v2 先只支持无参数
+        形式，遇到数字层数就明确报错，避免生成语义不完整的代码。
+        """
+        token = self._advance()
+        if self._peek().kind == TokenKind.WORD:
+            raise self._error(
+                f"{keyword} with a loop level is not supported yet",
+                self._peek(),
+            )
+        command_type = BreakCommand if keyword == "break" else ContinueCommand
+        return command_type(line=token.line, col=token.col)
 
     def _parse_simple_command(self) -> SimpleCommand:
         start = self._peek()

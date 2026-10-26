@@ -119,6 +119,22 @@ class CaseCommand(Command):
     col: int = 1
 
 
+@dataclass
+class BreakCommand(Command):
+    """循环内 ``break``；由代码生成器校验必须位于循环中。"""
+
+    line: int = 1
+    col: int = 1
+
+
+@dataclass
+class ContinueCommand(Command):
+    """循环内 ``continue``；由代码生成器校验必须位于循环中。"""
+
+    line: int = 1
+    col: int = 1
+
+
 # --------------------------------------------------------------------- 程序结构
 @dataclass(slots=True)
 class Pipeline:
@@ -161,6 +177,8 @@ __all__ = [
     "WhileCommand",
     "ForCommand",
     "CaseCommand",
+    "BreakCommand",
+    "ContinueCommand",
     "Pipeline",
     "AndOr",
     "Comment",

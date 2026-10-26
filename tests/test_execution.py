@@ -406,6 +406,54 @@ def test_nested_loops(run_shell):
     assert result.stdout == "1a\n1b\n2a\n2b\n"
 
 
+def test_break_in_while_loop(run_shell):
+    result = run_shell(
+        "i=0\n"
+        "while true; do\n"
+        "i=$((i + 1))\n"
+        "if [ $i -ge 3 ]; then break; fi\n"
+        "echo $i\n"
+        "done\n"
+        "echo done"
+    )
+    assert result.stdout == "1\n2\ndone\n"
+
+
+def test_break_in_for_loop(run_shell):
+    result = run_shell("for i in 1 2 3 4; do\nif [ $i -eq 2 ]; then break; fi\necho $i\ndone")
+    assert result.stdout == "1\n"
+
+
+def test_continue_in_for_loop(run_shell):
+    result = run_shell("for i in 1 2 3; do\nif [ $i -eq 2 ]; then continue; fi\necho $i\ndone")
+    assert result.stdout == "1\n3\n"
+
+
+def test_continue_in_while_loop(run_shell):
+    result = run_shell(
+        "i=0\n"
+        "while [ $i -lt 4 ]; do\n"
+        "i=$((i + 1))\n"
+        "if [ $i -eq 2 ]; then continue; fi\n"
+        "echo $i\n"
+        "done"
+    )
+    assert result.stdout == "1\n3\n4\n"
+
+
+def test_break_only_exits_inner_loop(run_shell):
+    result = run_shell(
+        "for i in 1 2; do\n"
+        "for j in a b; do\n"
+        'if [ "$j" = a ]; then break; fi\n'
+        'echo "$i$j"\n'
+        "done\n"
+        "echo $i\n"
+        "done"
+    )
+    assert result.stdout == "1\n2\n"
+
+
 @pytest.mark.parametrize(
     "source, expected",
     [

@@ -29,6 +29,8 @@ from transpiler.errors import CodegenError, LexError, ParseError, TranspileError
         ("read 1bad", CodegenError, "identifier"),
         ("x=$(if true; then echo x; fi)", CodegenError, "command substitution"),
         ("if true; then echo x; fi && echo y", CodegenError, "&&"),
+        ("break", CodegenError, "outside a loop"),
+        ("continue", CodegenError, "outside a loop"),
     ],
 )
 def test_unsupported_constructs_raise_typed_errors(source, expected_type, message):
