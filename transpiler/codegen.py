@@ -354,8 +354,12 @@ class CodeGenerator:
 
     @_emits(SetCommand)
     def _emit_set(self, command: SetCommand) -> None:
-        self.writer.line(f"_errexit = {command.errexit!r}")
-        self.writer.line("_status = 0")
+        if command.errexit is not None:
+            self.writer.line(f"_errexit = {command.errexit!r}")
+        if command.args is not None:
+            self.writer.line(f"_status = _set_args({self._argv_expr(command.args)})")
+        else:
+            self.writer.line("_status = 0")
 
     # ------------------------------------------------------------------ 简单命令
     @_emits(SimpleCommand)

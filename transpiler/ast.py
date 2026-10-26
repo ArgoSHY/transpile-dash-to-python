@@ -141,9 +141,10 @@ class ContinueCommand(Command):
 
 @dataclass
 class SetCommand(Command):
-    """``set -e`` / ``set +e``：切换 errexit 行为。"""
+    """``set -e`` / ``set +e``，以及 ``set -- args...`` 重置位置参数。"""
 
-    errexit: bool = False
+    errexit: bool | None = None
+    args: list[Word] | None = None
     line: int = 1
     col: int = 1
 

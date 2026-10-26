@@ -686,6 +686,31 @@ def test_set_e_success_continues(run_shell):
     assert result.returncode == 0
 
 
+def test_set_resets_positional_arguments(run_shell):
+    result = run_shell('set -- a b c\necho "$# $1 $3"')
+    assert result.stdout == "3 a c\n"
+
+
+def test_set_clears_positional_arguments(run_shell):
+    result = run_shell('set --\necho "$#"')
+    assert result.stdout == "0\n"
+
+
+def test_set_args_expands_words(run_shell):
+    result = run_shell('x="a b"\nset -- $x\necho "$# $1 $2"')
+    assert result.stdout == "2 a b\n"
+
+
+def test_set_args_preserves_quoted_words(run_shell):
+    result = run_shell('x="a b"\nset -- "$x"\necho "$# $1"')
+    assert result.stdout == "1 a b\n"
+
+
+def test_set_args_after_shift(run_shell):
+    result = run_shell('set -- a b c\nshift\nset -- x y\necho "$# $1 $2"')
+    assert result.stdout == "2 x y\n"
+
+
 @pytest.mark.parametrize(
     "source, expected",
     [

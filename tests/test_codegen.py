@@ -157,6 +157,11 @@ CODEGEN_CASES = [
         "_status = _echo(['hi'], stderr=True)\n" + EXIT,
         id="echo-to-stderr",
     ),
+    pytest.param(
+        "set -- a b",
+        "_status = _set_args(['a', 'b'])\n" + EXIT,
+        id="set-positional-args",
+    ),
 ]
 
 

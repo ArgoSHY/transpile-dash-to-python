@@ -215,6 +215,16 @@ def test_set_errexit_forms():
         assert command.errexit is expected
 
 
+def test_set_resets_positional_arguments():
+    command = script('set -- a "b c"')[0].first.commands[0]
+    assert isinstance(command, SetCommand)
+    assert command.errexit is None
+    assert command.args is not None
+    assert len(command.args) == 2
+    assert command.args[0].static_text() == "a"
+    assert command.args[1].segments[0].text == "b c"
+
+
 def test_compound_command_redirections():
     while_node = script("while read line; do echo $line; done < input.txt")[0].first.commands[0]
     if_node = script("if true; then echo yes; fi < input.txt")[0].first.commands[0]

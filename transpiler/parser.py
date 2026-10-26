@@ -324,12 +324,19 @@ class Parser:
         return command
 
     def _parse_set(self) -> SetCommand:
-        """解析 ``set -e`` / ``set +e`` / ``set -o errexit`` / ``set +o errexit``。"""
+        """解析 ``set -e/+e``、``set -- args...`` 和 ``set -o errexit``。"""
         token = self._advance()
-        arguments: list[str] = []
+        words: list[Word] = []
         while self._peek().kind == TokenKind.WORD and self._peek().word is not None:
-            arguments.append(self._peek().word.static_text() or "")
+            words.append(self._peek().word)
             self._advance()
+        arguments = [word.static_text() or "" for word in words]
+        if words and arguments[0] == "--":
+            return SetCommand(
+                args=words[1:],
+                line=token.line,
+                col=token.col,
+            )
         if len(arguments) == 1 and arguments[0] in ("-e", "+e"):
             return SetCommand(
                 errexit=arguments[0] == "-e",
@@ -343,7 +350,7 @@ class Parser:
                 col=token.col,
             )
         raise self._error(
-            "unsupported set options; v2 supports set -e / set +e",
+            "unsupported set options; v2 supports set -e / set +e / set --",
             token,
         )
 

@@ -96,6 +96,12 @@ def _is_set(name):
     return name in globals()
 
 
+def _set_args(fields):
+    """``set -- args...``：替换位置参数列表。"""
+    _ARGS[:] = [str(field) for field in fields]
+    return 0
+
+
 def _shift(count="1"):
     """弹出前 ``count`` 个位置参数；失败时返回 1 且不改动参数。"""
     try:
