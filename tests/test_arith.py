@@ -18,7 +18,19 @@ def evaluate(source, variables=None):
             return int(values.get(text, text))
         return int(values.get(text, 0))
 
-    return eval(expression, {"__builtins__": {"int": int, "bool": bool}}, {"_int": _int})
+    def _arith_div(left, right):
+        quotient = abs(left) // abs(right)
+        return quotient if (left < 0) == (right < 0) else -quotient
+
+    def _arith_mod(left, right):
+        return left - _arith_div(left, right) * right
+
+    helpers = {
+        "_int": _int,
+        "_arith_div": _arith_div,
+        "_arith_mod": _arith_mod,
+    }
+    return eval(expression, {"__builtins__": {"int": int, "bool": bool}}, helpers)
 
 
 def test_exact_translation_simple():
@@ -68,6 +80,13 @@ def test_evaluation(source, expected):
 
 def test_variables():
     assert evaluate("x * (y + 1)", {"x": 3, "y": 4}) == 15
+
+
+def test_integer_division_truncates_towards_zero():
+    assert evaluate("-5 / 2") == -2
+    assert evaluate("-5 % 2") == -1
+    assert evaluate("5 / -2") == -2
+    assert evaluate("5 % -2") == 1
 
 
 def test_positional_parameter_in_arithmetic():

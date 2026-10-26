@@ -72,6 +72,22 @@ def _int(name):
     return _to_int(globals().get(text, 0))
 
 
+def _arith_div(left, right):
+    if right == 0:
+        _sys.stderr.write("arithmetic: division by zero\n")
+        raise SystemExit(2)
+    # shell 的整数除法向零截断，而 Python // 是向下取整。
+    quotient = abs(left) // abs(right)
+    return quotient if (left < 0) == (right < 0) else -quotient
+
+
+def _arith_mod(left, right):
+    if right == 0:
+        _sys.stderr.write("arithmetic: division by zero\n")
+        raise SystemExit(2)
+    return left - _arith_div(left, right) * right
+
+
 def _is_set(name):
     if name.isdigit():
         return 0 <= int(name) <= len(_ARGS)
@@ -94,12 +110,26 @@ def _shift(count="1"):
     return 0
 
 
+def _ifs_value():
+    """返回当前 IFS；未设置时使用 shell 默认值。"""
+    if "IFS" in globals():
+        return str(globals()["IFS"])
+    return _IFS_WHITESPACE
+
+
+def _ifs_join(values):
+    """按 IFS 的第一个字符拼接 $* 等参数。"""
+    ifs = _ifs_value()
+    separator = ifs[0] if ifs else ""
+    return separator.join(str(item) for item in values)
+
+
 def _assign(parts):
     """在“不分词、不 glob”的上下文里展开单词（赋值右值、case 值等）。"""
     out = []
     for kind, value in parts:
         if kind in ("at_q", "at_u", "star_q", "star_u"):
-            out.append(" ".join(str(item) for item in value))
+            out.append(_ifs_join(value))
         else:
             out.append(str(value))
     return "".join(out)
@@ -108,7 +138,11 @@ def _assign(parts):
 def _split_fields(text):
     if text == "":
         return []
-    return [field for field in _re.split(r"[ \t\n]+", text) if field != ""]
+    ifs = _ifs_value()
+    if ifs == "":
+        return [text]
+    fields = _re.split("[" + _re.escape(ifs) + "]+", text)
+    return [field for field in fields if field != ""]
 
 
 def _finish_field(field):
@@ -148,23 +182,24 @@ def _expand(parts):
                         for field in _split_fields(argument):
                             result.extend(_finish_field([(char, True) for char in field]))
                 return result
-            joined = " ".join(arguments)
+            joined = _ifs_join(arguments)
             if kind == "at_q":
                 keep_empty = True
                 characters.extend((char, False, False) for char in joined)
             else:
                 characters.extend((char, True, True) for char in joined)
         elif kind in ("star_q", "star_u"):
-            joined = " ".join(str(item) for item in value)
+            joined = _ifs_join(value)
             if kind == "star_q":
                 keep_empty = True
                 characters.extend((char, False, False) for char in joined)
             else:
                 characters.extend((char, True, True) for char in joined)
+    ifs = _ifs_value()
     fields = []
     current = []
     for char, split, globbing in characters:
-        if split and char in _IFS_WHITESPACE:
+        if split and char in ifs:
             if current:
                 fields.append(current)
                 current = []
@@ -187,13 +222,22 @@ def _words(*word_parts):
     return fields
 
 
-def _write(text, path=None, append=False):
+def _write(text, path=None, append=False, stderr=False):
+    if stderr:
+        _sys.stderr.write(text)
+        _sys.stderr.flush()
+        return
     if path is None:
         _sys.stdout.write(text)
         _sys.stdout.flush()
         return
     with open(path, "a" if append else "w", encoding="utf-8") as handle:
         handle.write(text)
+
+
+def _report_os_error(path, error):
+    """把文件打开失败写成 shell 风格的错误，而不是抛 Python traceback。"""
+    _sys.stderr.write(f"{path}: {error}\n")
 
 
 def _escape_echo(text):
@@ -235,14 +279,31 @@ def _escape_echo(text):
     return "".join(out)
 
 
-def _echo(args, newline=True, escapes=True, stdout_path=None, stdout_append=False):
+def _echo(args, newline=True, escapes=True, stdout_path=None, stdout_append=False,
+          stderr=False, stderr_path=None, stderr_append=False):
     text = " ".join(str(item) for item in args)
     if escapes:
         text = _escape_echo(text)
     if newline:
         text += "\n"
-    _write(text, stdout_path, stdout_append)
-    return 0
+    try:
+        if stderr:
+            if stdout_path is not None:
+                _write("", stdout_path, stdout_append)
+            if stderr_path is not None:
+                _write(text, stderr_path, stderr_append)
+            else:
+                _write(text, stderr=True)
+            return 0
+        if stderr_path is not None:
+            # shell 即使 echo 不写 stderr，也会因为 2>file 创建/截断目标文件。
+            _write("", stderr_path, stderr_append)
+        _write(text, stdout_path, stdout_append)
+        return 0
+    except OSError as error:
+        target = stderr_path or stdout_path or "<stdout>"
+        _sys.stderr.write(f"{target}: {error}\n")
+        return 1
 
 
 def _cmdsub_echo(args):
@@ -478,6 +539,9 @@ def _pipeline(stages):
             elif kind == "wc":
                 source = data if data is not None else _pipeline_read_stdin()
                 data, status = _pipeline_wc(source, stage[1])
+            elif kind in ("true", "false", ":"):
+                data = ""
+                status = 1 if kind == "false" else 0
             else:  # pragma: no cover - 代码生成器只会产生已知类型
                 _sys.stderr.write(f"transpiler: unknown pipeline stage {kind!r}\n")
                 return 127
@@ -501,7 +565,11 @@ def _read_vars(names, stdin_path=None):
     handle_owned = False
     try:
         if stdin_path is not None:
-            handle = open(stdin_path, "r", encoding="utf-8")
+            try:
+                handle = open(stdin_path, "r", encoding="utf-8")
+            except OSError as error:
+                _sys.stderr.write(f"{stdin_path}: {error}\n")
+                return 1
             handle_owned = True
         elif _stdin_stack:
             handle = _stdin_stack[-1]
@@ -514,10 +582,19 @@ def _read_vars(names, stdin_path=None):
         return 1
     if line.endswith("\n"):
         line = line[:-1]
-    fields = line.split()
+    ifs = _ifs_value()
+    if ifs == "":
+        fields = [line] if line != "" else []
+        separator = ""
+    elif any(char not in _IFS_WHITESPACE for char in ifs):
+        fields = [field for field in _re.split("[" + _re.escape(ifs) + "]+", line) if field]
+        separator = next(char for char in ifs if char not in _IFS_WHITESPACE)
+    else:
+        fields = line.split()
+        separator = " "
     for index, name in enumerate(names):
         if index == len(names) - 1:
-            value = " ".join(fields[index:])
+            value = separator.join(fields[index:])
         else:
             value = fields[index] if index < len(fields) else ""
         globals()[name] = value
@@ -546,7 +623,8 @@ def _pwd():
 def _exit(args):
     if not args:
         raise SystemExit(0)
-    raise SystemExit(_to_int(args[0]))
+    # shell 退出码只有低 8 位；负数也按 0-255 归一化。
+    raise SystemExit(_to_int(args[0]) % 256)
 
 
 def _true():

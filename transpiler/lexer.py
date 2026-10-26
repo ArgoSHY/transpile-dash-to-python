@@ -25,6 +25,7 @@ from .tokens import (
 OPERATORS = (
     "2>&1",
     "1>&2",
+    ">&2",
     "&>>",
     "2>>",
     "1>>",
@@ -401,6 +402,11 @@ class Lexer:
         raise LexError("unterminated parameter expansion", line, col, self.filename)
 
     def _parse_braced(self, raw: str, quoted: bool, line: int, col: int) -> ParameterSegment:
+        # ${#var} 是字符串长度，优先级高于把 '#' 当成特殊参数名。
+        if raw.startswith("#") and len(raw) > 1:
+            inner = raw[1:]
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*|\d+|[@*?$!-]", inner):
+                return ParameterSegment(inner, quoted=quoted, op="length")
         match = _PARAM_RE.match(raw)
         if not match:
             raise LexError(f"unsupported parameter expansion ${{{raw}}}", line, col, self.filename)

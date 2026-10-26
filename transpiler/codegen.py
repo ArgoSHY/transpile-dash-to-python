@@ -234,7 +234,11 @@ class CodeGenerator:
         path = self._value_expr(redirects[-1].target)
         self.redirect_counter += 1
         variable = f"_dsh_stdin_{self.redirect_counter}"
-        self.writer.line(f"with open({path}, 'r', encoding='utf-8') as {variable}:")
+        path_variable = f"_dsh_redirect_path_{self.redirect_counter}"
+        self.writer.line(f"{path_variable} = {path}")
+        self.writer.line("try:")
+        self.writer.indent()
+        self.writer.line(f"with open({path_variable}, 'r', encoding='utf-8') as {variable}:")
         self.writer.indent()
         self.writer.line(f"_stdin_stack.append({variable})")
         self.writer.line("try:")
@@ -245,6 +249,13 @@ class CodeGenerator:
         self.writer.indent()
         self.writer.line("_stdin_stack.pop()")
         self.writer.dedent()
+        self.writer.dedent()
+        self.writer.dedent()
+        self.writer.line("except OSError as _dsh_error:")
+        self.writer.indent()
+        self.writer.line(f"_report_os_error({path_variable}, _dsh_error)")
+        self.writer.line("_status = 1")
+        self.writer.line("_check_errexit()")
         self.writer.dedent()
 
     # ------------------------------------------------------------------ 复合命令
@@ -273,6 +284,8 @@ class CodeGenerator:
 
     @_emits(WhileCommand)
     def _emit_while(self, command: WhileCommand) -> None:
+        # 循环没有执行时，shell 的 $? 是 0；先清零，循环体再覆盖它。
+        self.writer.line("_status = 0")
         condition = self._condition_expr(command.condition) if command.condition else "False"
         if command.until:
             self.writer.line(f"while not ({condition}):")
@@ -290,6 +303,8 @@ class CodeGenerator:
 
     @_emits(ForCommand)
     def _emit_for(self, command: ForCommand) -> None:
+        # 空列表时 for 不执行，shell 的 $? 是 0。
+        self.writer.line("_status = 0")
         if command.words is None:
             iterable = "_argv()"
         else:
@@ -392,6 +407,17 @@ class CodeGenerator:
             raise self._error_for("shift takes at most one argument", command)
         return self._value_expr(command.words[1]) if len(command.words) == 2 else "1"
 
+    @staticmethod
+    def _echo_redirects_to_stderr(redirects: list[Redirect]) -> bool:
+        """判断 echo 最后一个输出重定向是否指向 stderr。"""
+        to_stderr = False
+        for redirect in redirects:
+            if redirect.op in ("1>&2", ">&2"):
+                to_stderr = True
+            elif redirect.op in (">", ">>", "1>", "1>>", "&>", "&>>"):
+                to_stderr = False
+        return to_stderr
+
     def _echo_flags(self, command: SimpleCommand) -> tuple[bool, bool, int]:
         """返回 ``(是否换行, 是否处理反斜杠转义, 消耗的选项个数)``。"""
         newline = True
@@ -417,8 +443,13 @@ class CodeGenerator:
         arguments = self._argv_expr(command.words[1 + consumed :])
         all_kwargs = self._redirect_kwargs(command.redirects, allowed=_ALL_REDIRECT_KEYS)
         kwargs = [
-            item for item in all_kwargs if item.split("=", 1)[0] in {"stdout_path", "stdout_append"}
+            item
+            for item in all_kwargs
+            if item.split("=", 1)[0]
+            in {"stdout_path", "stdout_append", "stderr_path", "stderr_append"}
         ]
+        if self._echo_redirects_to_stderr(command.redirects):
+            kwargs.append("stderr=True")
         if not newline:
             kwargs.append("newline=False")
         if not escapes:
@@ -501,7 +532,7 @@ class CodeGenerator:
                 values["stderr_to_stdout"] = "True"
             elif redirect.op == "2>&1":
                 values["stderr_to_stdout"] = "True"
-            elif redirect.op == "1>&2":
+            elif redirect.op in ("1>&2", ">&2"):
                 values["stdout_to_stderr"] = "True"
             else:  # pragma: no cover - 其余情况 parser 已经拒绝
                 raise CodegenError(
@@ -569,8 +600,11 @@ class CodeGenerator:
             kwargs = [
                 item
                 for item in all_kwargs
-                if item.split("=", 1)[0] in {"stdout_path", "stdout_append"}
+                if item.split("=", 1)[0]
+                in {"stdout_path", "stdout_append", "stderr_path", "stderr_append"}
             ]
+            if self._echo_redirects_to_stderr(command.redirects):
+                kwargs.append("stderr=True")
             if not newline:
                 kwargs.append("newline=False")
             if not escapes:
@@ -657,6 +691,9 @@ class CodeGenerator:
             if name == "wc":
                 stages.append(f"('wc', {self._argv_expr(command.words[1:])})")
                 continue
+            if name in ("true", "false", ":"):
+                stages.append(f"({name!r},)")
+                continue
             if name in _BUILTINS:
                 raise self._error_for(
                     "only echo/grep/wc builtins are supported in pipelines", command
@@ -720,6 +757,10 @@ class CodeGenerator:
     def _parameter_parts(self, segment: ParameterSegment) -> list[str]:
         name = segment.name
         kind = "P" if segment.quoted else "p"
+        if segment.op == "length":
+            if name in ("@", "*"):
+                return [f"({kind!r}, str(len(_argv())))"]
+            return [f"({kind!r}, str(len({self._parameter_base_expr(name)})))"]
         # 模式运算优先处理，这样 ${@#x} 这类不支持的特殊参数也会走明确的报错分支。
         if segment.op in _PATTERN_PARAM_OPS:
             return [f"({kind!r}, {self._parameter_pattern_expr(segment)})"]

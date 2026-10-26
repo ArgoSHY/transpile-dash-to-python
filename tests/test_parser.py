@@ -61,6 +61,8 @@ def test_prefix_assignment_before_command():
 def test_redirections():
     cmd = command("python x.py <in >out 2>>err 2>&1")
     assert [redirect.op for redirect in cmd.redirects] == ["<", ">", "2>>", "2>&1"]
+    cmd = command("echo hi >&2")
+    assert [redirect.op for redirect in cmd.redirects] == [">&2"]
 
 
 def test_and_or_chain():

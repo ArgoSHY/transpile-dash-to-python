@@ -74,6 +74,15 @@ CASES = [
     pytest.param('echo "a\\nb\\nc" | grep b', {}, id="python-grep-pipeline"),
     pytest.param('echo "a\\nb\\nc" | wc -l', {}, id="python-wc-pipeline"),
     pytest.param("set -e\necho before\nfalse\necho after", {}, id="set-e"),
+    pytest.param(
+        'IFS=,\nx="a,b,c"\nfor y in $x; do echo "[$y]"; done',
+        {},
+        id="custom-ifs",
+    ),
+    pytest.param('false | true\necho "status=$?"', {}, id="pipeline-status"),
+    pytest.param("echo *.nonexistent", {}, id="unmatched-glob"),
+    pytest.param('echo "$(echo "a b")"', {}, id="nested-quotes"),
+    pytest.param('x=hello\necho "${#x}"', {}, id="parameter-length"),
 ]
 
 

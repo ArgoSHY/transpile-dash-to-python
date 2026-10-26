@@ -194,7 +194,16 @@ def test_quoted_expansions_are_marked_quoted():
 def test_operators():
     assert ops("ls && echo ok || echo no | wc -l") == ["&&", "||", "|"]
     assert ops("cat <in >out 2>err 2>&1") == ["<", ">", "2>", "2>&1"]
+    assert ops("echo hi >&2") == [">&2"]
     assert ops("a; b ;; c") == [";", ";;"]
+
+
+def test_parameter_length_expansion():
+    (word,) = words("${#name}")
+    segment = word.segments[0]
+    assert isinstance(segment, ParameterSegment)
+    assert segment.name == "name"
+    assert segment.op == "length"
 
 
 def test_comments_and_quoting():

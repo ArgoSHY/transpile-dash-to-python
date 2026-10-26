@@ -229,7 +229,9 @@ class _ArithmeticParser:
         if operator == "||":
             return f"int(bool({left}) or bool({right}))"
         if operator == "/":
-            return f"(({left}) // ({right}))"
+            return f"_arith_div(({left}), ({right}))"
+        if operator == "%":
+            return f"_arith_mod(({left}), ({right}))"
         return f"(({left}) {operator} ({right}))"
 
 

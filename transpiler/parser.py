@@ -56,7 +56,22 @@ _ASSIGN_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=")
 _NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 _REDIRECT_OPS = frozenset(
-    {"<", ">", ">>", "2>", "2>>", "1>", "1>>", "&>", "&>>", "2>&1", "1>&2", "2>&", "1>&"}
+    {
+        "<",
+        ">",
+        ">>",
+        "2>",
+        "2>>",
+        "1>",
+        "1>>",
+        "&>",
+        "&>>",
+        "2>&1",
+        "1>&2",
+        ">&2",
+        "2>&",
+        "1>&",
+    }
 )
 _RESERVED_WORDS = frozenset(
     {
@@ -409,7 +424,7 @@ class Parser:
 
     def _parse_redirect(self) -> Redirect:
         op = self._advance().value
-        if op in ("2>&1", "1>&2"):
+        if op in ("2>&1", "1>&2", ">&2"):
             return Redirect(op=op, target=None)
         if op in ("2>&", "1>&"):
             raise self._error(f"unsupported file-descriptor duplication {op!r}")

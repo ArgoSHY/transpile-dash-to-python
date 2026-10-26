@@ -36,12 +36,15 @@ CODEGEN_CASES = [
     ),
     pytest.param(
         "for i in 1 2 3; do\necho $i\ndone",
-        "for i in ['1', '2', '3']:\n    _status = _echo(_words((('p', _get('i')),)))\n" + EXIT,
+        "_status = 0\n"
+        "for i in ['1', '2', '3']:\n"
+        "    _status = _echo(_words((('p', _get('i')),)))\n" + EXIT,
         id="for-loop",
     ),
     pytest.param(
         "x=0\nwhile [ $x -lt 2 ]; do\nx=$((x+1))\ndone",
         "x = '0'\n"
+        "_status = 0\n"
         "_status = 0\n"
         "while _test_binary('-lt', _assign((('p', _get('x')),)), '2'):\n"
         "    x = _assign((('p', str(((_int('x')) + (1)))),))\n"
@@ -107,12 +110,12 @@ CODEGEN_CASES = [
     ),
     pytest.param(
         "for i in 1 2; do\nbreak\ndone",
-        "for i in ['1', '2']:\n    break\n" + EXIT,
+        "_status = 0\nfor i in ['1', '2']:\n    break\n" + EXIT,
         id="break-in-for",
     ),
     pytest.param(
         "while true; do\ncontinue\ndone",
-        "while True:\n    continue\n" + EXIT,
+        "_status = 0\nwhile True:\n    continue\n" + EXIT,
         id="continue-in-while",
     ),
     pytest.param(
@@ -122,13 +125,20 @@ CODEGEN_CASES = [
     ),
     pytest.param(
         'while read line; do\necho "line:$line"\ndone < input.txt',
-        "with open('input.txt', 'r', encoding='utf-8') as _dsh_stdin_1:\n"
-        "    _stdin_stack.append(_dsh_stdin_1)\n"
-        "    try:\n"
-        "        while _ok(_read_vars(['line'])):\n"
-        "            _status = _echo(_words((('q', 'line:'), ('P', _get('line')),)))\n"
-        "    finally:\n"
-        "        _stdin_stack.pop()\n" + EXIT,
+        "_dsh_redirect_path_1 = 'input.txt'\n"
+        "try:\n"
+        "    with open(_dsh_redirect_path_1, 'r', encoding='utf-8') as _dsh_stdin_1:\n"
+        "        _stdin_stack.append(_dsh_stdin_1)\n"
+        "        try:\n"
+        "            _status = 0\n"
+        "            while _ok(_read_vars(['line'])):\n"
+        "                _status = _echo(_words((('q', 'line:'), ('P', _get('line')),)))\n"
+        "        finally:\n"
+        "            _stdin_stack.pop()\n"
+        "except OSError as _dsh_error:\n"
+        "    _report_os_error(_dsh_redirect_path_1, _dsh_error)\n"
+        "    _status = 1\n"
+        "    _check_errexit()\n" + EXIT,
         id="compound-input-redirection",
     ),
     pytest.param(
@@ -141,6 +151,11 @@ CODEGEN_CASES = [
         "set -e\necho hi",
         "_errexit = True\n_status = 0\n_status = _echo(['hi'])\n_check_errexit()\n" + EXIT,
         id="set-e",
+    ),
+    pytest.param(
+        "echo hi >&2",
+        "_status = _echo(['hi'], stderr=True)\n" + EXIT,
+        id="echo-to-stderr",
     ),
 ]
 
@@ -166,6 +181,7 @@ SYNTAX_CASES = [
     "echo hello | grep hello | wc -l",
     "set -e\nfalse\necho after",
     "set +e\nfalse\necho after",
+    "echo hi >&2",
 ]
 
 

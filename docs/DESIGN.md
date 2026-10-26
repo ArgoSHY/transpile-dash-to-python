@@ -86,8 +86,9 @@ The runtime performs expansion in two different modes:
   contexts and test operands. It concatenates the parts without splitting or globbing.
 * `_expand(parts)` / `_words(*word_parts)` — used for command arguments and loop item
   lists. It builds a character stream annotated with `split` and `glob` flags, splits the
-  unquoted parts on IFS whitespace, then pathname-expands each resulting field with
-  `glob`. Quoted/escaped characters are marked as non-splitting and non-globbing.
+  unquoted parts on the current `IFS` characters (`_ifs_value()`; default space/tab/newline),
+  then pathname-expands each resulting field with `glob`. Quoted/escaped characters are
+  marked as non-splitting and non-globbing.
 
 Special handling:
 
@@ -122,7 +123,7 @@ Important runtime conventions:
 | assignment value | `_assign(...)` |
 | echo | `_echo(args, newline=..., escapes=..., stdout_path=..., stdout_append=...)` |
 | external command | `_run(argv, stdin_path=..., stdout_path=..., ..., env_extra=...)` |
-| pipeline | `_pipeline([stage, ...])`; a stage is an argv list, `('echo', args, newline, escapes)`, `('grep', argv)` or `('wc', argv)`. Stages run sequentially and pass data in memory; external stages use `subprocess.run` |
+| pipeline | `_pipeline([stage, ...])`; a stage is an argv list, `('echo', args, newline, escapes)`, `('grep', argv)`, `('wc', argv)`, or `('true'|'false'|':',)`. Stages run sequentially and pass data in memory; external stages use `subprocess.run` |
 | test expression | `_test_unary(op, value)` / `_test_binary(op, left, right)` |
 | compound input redirection | generated `with open(path) as _dsh_stdin_N:` plus `_stdin_stack.append/pop`; `_run`, `_read_vars`, `_pipeline`, `_cmdsub` default to the stack top |
 | `set -e` | emitted as `_errexit = True/False`; scripts that use `set` call `_check_errexit()` after statements, which exits on a non-zero `_status` |
@@ -140,8 +141,14 @@ redirections push/pop in order. `read` now returns non-zero at EOF, which is wha
 `while read line; do ...; done < file` terminate correctly.
 
 Exit statuses: a simple command/assignment/test/compound statement updates `_status`.
-A `while`/`for` loop leaves the last body command's status. An `if` without `else` gets an
+A `while`/`for` loop initializes `_status = 0` before iterating, so an empty loop reports 0;
+if the body runs, the last body command's status wins. An `if` without `else` gets an
 implicit `else: _status = 0`, matching the shell's "no branch taken" result.
+
+Arithmetic division/modulo use `_arith_div()` / `_arith_mod()`: they report division by zero
+as a clean error instead of a Python traceback, and truncate toward zero like POSIX shell
+arithmetic. File-open failures for redirections are reported as shell-style errors and set
+status 1; compound-command `with open(...)` is wrapped in `try/except OSError`.
 
 `_check_errexit()` is emitted only for scripts that contain `set -e`/`set +e` (detected by
 a small AST scan), so ordinary generated programs keep their previous output. The check is

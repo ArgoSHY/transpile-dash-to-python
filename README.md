@@ -84,19 +84,19 @@ dependency is needed by the transpiler or by generated programs.
 |---|---|
 | Comments / shebang | `#` comments; `#!/bin/dash` ignored (the generated program has its own Python shebang) |
 | Quoting | single quotes, double quotes, backslash escapes, line continuation, empty quoted words |
-| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants; string patterns `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`, `${var/old/new}`, `${var//old/new}` |
+| Parameters | `$name`, `${name}`, `$1`…`$9`, `${10}`, `$#`, `$?`, `$$`, `$@`, `$*`, `${#var}`, `${var:-word}`, `${var:=word}`, `${var:+word}`, `${var:?word}` and the `-`/`=`/`+`/`?` variants; string patterns `${var#pat}`, `${var##pat}`, `${var%pat}`, `${var%%pat}`, `${var/old/new}`, `${var//old/new}` |
 | Command substitution | `$(simple command)` and `` `simple command` `` (trailing newlines stripped) |
 | Arithmetic | `$((...))` with `+ - * / % ** << >> & \| ^ ~ ! && \|\| == != < <= > >= ?:` and variables; integer division maps to `//` |
 | Globbing | unquoted `*`, `?`, `[...]` expanded with `glob`; quoted patterns stay literal |
-| Word splitting | unquoted expansions split on space/tab/newline; quoted expansions do not |
+| Word splitting | unquoted expansions split on the current `IFS` (default space/tab/newline); quoted expansions do not; `IFS=,` also drives `read` and `$*` joining |
 | Simple commands | external commands via `subprocess.run`; prefix assignments passed as environment |
 | Builtins | `echo` (`-n`, `-e`, `-E`), `cd`, `read` (`-r` accepted), `shift [n]`, `set -e`/`set +e`, `exit`, `true`, `false`, `:`, `pwd`, `export`, `unset` |
 | Control flow | `if/elif/else/fi`, `while/do/done`, `until/do/done`, `for NAME in ...; do ...; done`, `for NAME; do ...; done`, `break`, `continue`（暂不支持层数参数） |
 | `case` | patterns with `\|` alternation, `*` globs, `*)` default, optional final `;;` |
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
 | Lists / operators | `;`, newline, `&&`, `\|\|`, `\|` pipelines |
-| Pipelines | external commands plus pure-Python builtins `echo`, `grep` (`-i/-v/-c/-n/-q/-F`) and `wc` (`-l/-w/-c`); status is the last command's status |
-| Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2` on simple commands; input redirection on compound commands (`while read ...; do ...; done < file`) |
+| Pipelines | external commands plus pure-Python stages `echo`, `grep` (`-i/-v/-c/-n/-q/-F`), `wc` (`-l/-w/-c`), `true`/`false`/`:`; status is the last command's status |
+| Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2`, `>&2` on simple commands; input redirection on compound commands (`while read ...; do ...; done < file`) |
 | Error reporting | typed `LexError` / `ParseError` / `CodegenError` with filename, line and column; no partial output |
 
 ## Deliberate differences from dash
@@ -120,7 +120,8 @@ The transpiler is honest about being a subset. These are known differences:
 5. **`$10` follows POSIX**: it is `${1}` followed by the literal `0`; use `${10}` for the
    tenth argument.
 6. **`$!`** expands to the empty string (no background-job support); `$-` is unsupported.
-7. **IFS is fixed** to space/tab/newline; custom `IFS` is not modelled.
+7. **`IFS`** is supported for the common cases (`IFS=,`, empty `IFS`, unset `IFS`); mixed
+   whitespace/non-whitespace `IFS` and empty-field corner cases are approximated.
 8. **Mixed quoted/unquoted word expansion** handles the common cases (quoted prefix and
    suffixes, unquoted variable splitting, globbing). A word that concatenates `$@` with
    adjacent text is approximated by joining the arguments with spaces.
@@ -130,11 +131,14 @@ The transpiler is honest about being a subset. These are known differences:
     exit status, but the status of a whole `&&`/`||` list is collapsed to 0/1.
     `set -e`/`set +e` is supported for the common cases: failures in `if`/`while`/`until`
     conditions are ignored, but a failing `&&`/`||` list may exit more eagerly than dash.
-11. **`read`** splits on whitespace; `-r` is accepted but backslash processing is not
-    modelled. The last named variable receives the remainder of the line.
+11. **`read`** splits using the current `IFS`; `-r` is accepted but backslash processing is
+    not modelled. The last named variable receives the remainder of the line (joined by the
+    first non-whitespace IFS character).
 12. **Internal names** (`_status`, `_echo`, `_get`, …) are reserved; avoid using them as
     shell variable names in transpiled scripts.
-13. **Python 3.10+** is required to run the generated program.
+13. **`${var:offset:length}` substring expansion is not implemented** (string length
+    `${#var}` is).
+14. **Python 3.10+** is required to run the generated program.
 
 See [docs/DESIGN.md](docs/DESIGN.md) for the grammar, expansion model and design rationale.
 
@@ -157,7 +161,7 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-311 passed, 24 skipped
+333 passed, 29 skipped
 ```
 
 The 21 skips are exactly the differential tests; on Linux the same suite runs them too.
@@ -199,6 +203,8 @@ The old suite still imports the archived `legacy/trans.py` and can be run with
 
 ## Roadmap
 
+- `${var:offset:length}` substring expansion
+- `set --` / resetting positional parameters
 - shell functions with positional parameters and `return`
 - compound-command output redirection (`if ... fi > log`)
 - here-documents, `[[ ]]`, arrays and brace expansion

@@ -684,3 +684,108 @@ def test_set_e_success_continues(run_shell):
     result = run_shell("set -e\ntrue\necho after")
     assert result.stdout == "after\n"
     assert result.returncode == 0
+
+
+def test_custom_ifs_splits_fields(run_shell):
+    result = run_shell('IFS=,\nx="a,b,c"\nfor y in $x; do\necho "[$y]"\ndone')
+    assert result.stdout == "[a]\n[b]\n[c]\n"
+
+
+def test_custom_ifs_does_not_split_quoted_values(run_shell):
+    result = run_shell('IFS=,\nx="a,b"\necho "$x"')
+    assert result.stdout == "a,b\n"
+
+
+def test_custom_ifs_read_keeps_delimiter_in_last_variable(run_shell):
+    result = run_shell(
+        'IFS=,\nread a b\necho "$a|$b"',
+        stdin="one,two,three\n",
+    )
+    assert result.stdout == "one|two,three\n"
+
+
+def test_custom_ifs_joins_star_with_first_ifs_char(run_shell):
+    result = run_shell('IFS=,\necho "$*"', args=("a", "b"))
+    assert result.stdout == "a,b\n"
+
+
+def test_pipeline_false_true_uses_last_exit_status(run_shell):
+    result = run_shell('false | true\necho "status=$?"')
+    assert result.stdout == "status=0\n"
+    assert result.returncode == 0
+
+
+def test_pipeline_true_false_uses_last_exit_status(run_shell):
+    result = run_shell('true | false\necho "status=$?"')
+    assert result.stdout == "status=1\n"
+
+
+def test_unmatched_glob_is_kept_literal(run_shell):
+    result = run_shell("echo *.nonexistent")
+    assert result.stdout == "*.nonexistent\n"
+
+
+def test_echo_stdout_to_stderr(run_shell):
+    result = run_shell("echo hi >&2")
+    assert result.stdout == ""
+    assert result.stderr == "hi\n"
+    assert result.returncode == 0
+
+
+def test_echo_stderr_file_redirect_creates_file(run_shell):
+    result = run_shell('echo hi 2>err.txt\necho "status=$?"')
+    assert result.stdout == "hi\nstatus=0\n"
+    assert (result.workdir / "err.txt").read_text(encoding="utf-8") == ""
+
+
+def test_nested_quotes_in_command_substitution(run_shell):
+    result = run_shell('echo "$(echo "a b")"')
+    assert result.stdout == "a b\n"
+
+
+def test_parameter_length_expansion(run_shell):
+    result = run_shell('x=hello\necho "${#x} ${#1} ${#@}"', args=("arg1",))
+    assert result.stdout == "5 4 1\n"
+
+
+def test_loop_status_is_zero_without_iterations(run_shell):
+    result = run_shell('false\nwhile false; do :; done\necho "status=$?"')
+    assert result.stdout == "status=0\n"
+
+
+def test_division_by_zero_is_a_clean_error(run_shell):
+    result = run_shell("echo $((1 / 0))")
+    assert result.stdout == ""
+    assert result.returncode == 2
+    assert "division by zero" in result.stderr
+    assert "Traceback" not in result.stderr
+
+
+def test_arithmetic_truncates_towards_zero(run_shell):
+    result = run_shell("echo $(( -5 / 2 )) $(( -5 % 2 )) $(( 5 / -2 )) $(( 5 % -2 ))")
+    assert result.stdout == "-2 -1 -2 1\n"
+
+
+def test_exit_code_is_masked_to_8_bits(run_shell):
+    assert run_shell("exit 300").returncode == 44
+    assert run_shell("exit -1").returncode == 255
+
+
+def test_read_missing_redirect_file_is_a_clean_error(run_shell):
+    result = run_shell('read x < missing.txt\necho "status=$?"')
+    assert result.stdout == "status=1\n"
+    assert "Traceback" not in result.stderr
+    assert "missing.txt" in result.stderr
+
+
+def test_echo_output_redirect_open_failure_is_clean(run_shell):
+    result = run_shell('echo hi > missing-dir/out.txt\necho "status=$?"')
+    assert result.stdout == "status=1\n"
+    assert "Traceback" not in result.stderr
+
+
+def test_compound_redirect_missing_file_is_clean(run_shell):
+    result = run_shell('while read line; do :; done < missing.txt\necho "status=$?"')
+    assert result.stdout == "status=1\n"
+    assert "Traceback" not in result.stderr
+    assert "missing.txt" in result.stderr
