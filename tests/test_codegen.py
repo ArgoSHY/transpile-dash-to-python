@@ -131,6 +131,12 @@ CODEGEN_CASES = [
         "        _stdin_stack.pop()\n" + EXIT,
         id="compound-input-redirection",
     ),
+    pytest.param(
+        "echo hello | grep hello | wc -l",
+        "_status = _pipeline([('echo', ['hello'], True, True), "
+        "('grep', ['hello']), ('wc', ['-l'])])\n" + EXIT,
+        id="python-pipeline-builtins",
+    ),
 ]
 
 
@@ -152,6 +158,7 @@ SYNTAX_CASES = [
     "for i in 1 2; do\nif [ $i -eq 1 ]; then continue; fi\nbreak\ndone",
     "while [ $# -gt 0 ]; do\necho $1\nshift\ndone",
     "while read line; do\necho $line\ndone < input.txt",
+    "echo hello | grep hello | wc -l",
 ]
 
 

@@ -311,6 +311,61 @@ def test_pipeline_with_builtin_echo(run_shell):
     assert result.stdout == "HELLO\n"
 
 
+def test_pipeline_python_grep_matches(run_shell):
+    result = run_shell("echo hello world | grep hello")
+    assert result.stdout == "hello world\n"
+    assert result.returncode == 0
+
+
+def test_pipeline_python_grep_no_match_sets_status(run_shell):
+    result = run_shell("echo hello | grep missing")
+    assert result.stdout == ""
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("echo HELLO | grep -i hello", "HELLO\n"),
+        ("echo abc | grep -c a", "1\n"),
+        ('echo "a\\nb" | grep -n a', "1:a\n"),
+        ("echo abc | grep -v abc", ""),
+    ],
+)
+def test_pipeline_python_grep_options(run_shell, source, expected):
+    assert run_shell(source).stdout == expected
+
+
+def test_pipeline_python_wc_lines(run_shell):
+    assert run_shell("echo hello | wc -l").stdout == "1\n"
+    assert run_shell('echo "a\\nb\\nc" | wc -l').stdout == "3\n"
+    assert run_shell("echo -n hello | wc -l").stdout == "0\n"
+
+
+def test_pipeline_python_grep_and_wc_chain(run_shell):
+    result = run_shell("echo hello | grep ell | wc -l")
+    assert result.stdout == "1\n"
+    assert result.returncode == 0
+
+
+def test_pipeline_python_grep_after_external_command(run_shell):
+    result = run_shell(
+        f"{py('lines.py')} | grep beta",
+        files={"lines.py": "print('alpha'); print('beta')\n"},
+    )
+    assert result.stdout == "beta\n"
+
+
+def test_pipeline_python_grep_reads_stdin_when_first(run_shell):
+    result = run_shell("grep ^alpha | wc -l", stdin="alpha\nbeta\n")
+    assert result.stdout == "1\n"
+
+
+def test_pipeline_python_wc_after_failed_grep(run_shell):
+    result = run_shell('echo hello | grep missing | wc -l\necho "status=$?"')
+    assert result.stdout == "0\nstatus=0\n"
+
+
 def test_pipeline_status_is_last_command(run_shell):
     result = run_shell(
         f'{py("a.py")} | {py("b.py")}\necho "status=$?"',

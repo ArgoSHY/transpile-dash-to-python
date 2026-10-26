@@ -122,7 +122,7 @@ Important runtime conventions:
 | assignment value | `_assign(...)` |
 | echo | `_echo(args, newline=..., escapes=..., stdout_path=..., stdout_append=...)` |
 | external command | `_run(argv, stdin_path=..., stdout_path=..., ..., env_extra=...)` |
-| pipeline | `_pipeline([stage, ...])`; a stage is an argv list or `('echo', args, newline, escapes)` |
+| pipeline | `_pipeline([stage, ...])`; a stage is an argv list, `('echo', args, newline, escapes)`, `('grep', argv)` or `('wc', argv)`. Stages run sequentially and pass data in memory; external stages use `subprocess.run` |
 | test expression | `_test_unary(op, value)` / `_test_binary(op, left, right)` |
 | compound input redirection | generated `with open(path) as _dsh_stdin_N:` plus `_stdin_stack.append/pop`; `_run`, `_read_vars`, `_pipeline`, `_cmdsub` default to the stack top |
 | status | `_status` is updated after simple commands; `$?` reads it |
@@ -150,8 +150,8 @@ All user-facing diagnostics derive from `TranspileError`:
 * `ParseError` — missing `then`/`fi`/`do`/`done`/`esac`, function definitions, arithmetic
   `for`, reserved words in the wrong position, malformed test expressions;
 * `CodegenError` — constructs the parser accepts but v2 cannot codegen (compound commands
-  in `&&`/`||`, builtins other than `echo` in pipelines, complex command substitution,
-  compound-command output redirection, invalid arithmetic).
+  in `&&`/`||`, builtins other than `echo`/`grep`/`wc` in pipelines, complex command
+  substitution, compound-command output redirection, invalid arithmetic).
 
 Each message includes `filename:line:column` and the phase. The CLI exits with status 2
 and never prints partial output.

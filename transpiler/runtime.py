@@ -331,59 +331,157 @@ def _run_words(fields, **kwargs):
     return _run(fields, **kwargs)
 
 
-def _pipeline_stage_argv(stage):
-    """把 pipeline 阶段描述转换成真正的进程参数。
+def _pipeline_read_stdin():
+    """供“第一个阶段就是 Python 内建”的 pipeline 读取标准输入。"""
+    if _stdin_stack:
+        return _stdin_stack[-1].read()
+    return _sys.stdin.read()
 
-    外部命令阶段本来就是参数列表；内建 echo 阶段则启动一个很小的 Python
-    子进程来向管道写数据，这样 ``echo hi | grep h`` 也能正常工作。
-    """
-    if isinstance(stage, tuple) and stage and stage[0] == "echo":
-        _, arguments, newline, escapes = stage
-        text = " ".join(str(item) for item in arguments)
-        if escapes:
-            text = _escape_echo(text)
-        if newline:
-            text += "\n"
-        return [
-            _sys.executable,
-            "-c",
-            "import sys; sys.stdout.write(sys.argv[1])",
-            text,
-        ]
-    return list(stage)
+
+def _pipeline_echo(stage):
+    """内建 echo 阶段：直接在内存里生成文本。"""
+    _, arguments, newline, escapes = stage
+    text = " ".join(str(item) for item in arguments)
+    if escapes:
+        text = _escape_echo(text)
+    if newline:
+        text += "\n"
+    return text
+
+
+def _pipeline_grep(text, argv):
+    """纯 Python 版 grep，支持 -i/-v/-c/-n/-q/-F 和正则 pattern。"""
+    arguments = [str(item) for item in argv]
+    ignore_case = invert = count = line_numbers = quiet = fixed = False
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--":
+            index += 1
+            break
+        if not argument.startswith("-") or argument == "-":
+            break
+        for flag in argument[1:]:
+            if flag == "i":
+                ignore_case = True
+            elif flag == "v":
+                invert = True
+            elif flag == "c":
+                count = True
+            elif flag == "n":
+                line_numbers = True
+            elif flag == "q":
+                quiet = True
+            elif flag == "F":
+                fixed = True
+            elif flag in ("E", "G"):
+                pass
+            else:
+                _sys.stderr.write(f"grep: unsupported option -{flag}\n")
+                return "", 2
+        index += 1
+    if index >= len(arguments):
+        _sys.stderr.write("grep: missing pattern\n")
+        return "", 2
+    pattern = arguments[index]
+    index += 1
+    if index < len(arguments):
+        _sys.stderr.write("grep: file arguments are not supported in pipelines\n")
+        return "", 2
+    regex_flags = _re.IGNORECASE if ignore_case else 0
+    try:
+        regex = _re.compile(_re.escape(pattern) if fixed else pattern, regex_flags)
+    except _re.error:
+        regex = _re.compile(_re.escape(pattern), regex_flags)
+    matched = []
+    for number, line in enumerate(text.splitlines(), 1):
+        hit = bool(regex.search(line))
+        if hit == invert:
+            continue
+        matched.append(f"{number}:{line}" if line_numbers else line)
+    if quiet:
+        return "", 0 if matched else 1
+    if count:
+        return f"{len(matched)}\n", 0 if matched else 1
+    output = "\n".join(matched)
+    if matched:
+        output += "\n"
+    return output, 0 if matched else 1
+
+
+def _pipeline_wc(text, argv):
+    """纯 Python 版 wc；pipeline 中至少支持 -l，也顺手支持 -w/-c。"""
+    arguments = [str(item) for item in argv]
+    if arguments:
+        option = arguments[0]
+        if len(arguments) > 1:
+            _sys.stderr.write("wc: file arguments are not supported in pipelines\n")
+            return "", 2
+        if option == "-l":
+            return f"{text.count(chr(10))}\n", 0
+        if option == "-w":
+            return f"{len(text.split())}\n", 0
+        if option == "-c":
+            return f"{len(text)}\n", 0
+        _sys.stderr.write(f"wc: unsupported option {option}\n")
+        return "", 2
+    lines = text.count("\n")
+    return f"{lines} {len(text.split())} {len(text)}\n", 0
+
+
+def _pipeline_external(argv, data, capture):
+    """运行外部命令；capture 为真时捕获 stdout 供下一个阶段使用。"""
+    kwargs = {"text": True}
+    if capture:
+        kwargs["stdout"] = _subprocess.PIPE
+    if data is not None:
+        kwargs["input"] = data
+    elif _stdin_stack:
+        kwargs["stdin"] = _stdin_stack[-1]
+    try:
+        result = _subprocess.run(list(argv), **kwargs)
+    except FileNotFoundError:
+        _sys.stderr.write(f"{argv[0]}: command not found\n")
+        return 127, ""
+    except OSError as error:
+        _sys.stderr.write(f"{argv[0]}: {error}\n")
+        return 126, ""
+    return result.returncode, (result.stdout or "")
 
 
 def _pipeline(stages):
+    """执行 pipeline；echo/grep/wc 用 Python 实现，其余阶段交给 subprocess。"""
     if not stages or any(not stage for stage in stages):
         _sys.stderr.write("transpiler: empty pipeline\n")
         return 127
-    processes = []
-    previous = None
-    try:
-        for index, stage in enumerate(stages):
-            argv = _pipeline_stage_argv(stage)
-            if previous is not None:
-                stdin = previous.stdout
-            elif _stdin_stack:
-                stdin = _stdin_stack[-1]
-            else:
-                stdin = None
-            stdout = _subprocess.PIPE if index < len(stages) - 1 else None
-            try:
-                process = _subprocess.Popen(argv, stdin=stdin, stdout=stdout)
-            except FileNotFoundError:
-                _sys.stderr.write(f"{argv[0]}: command not found\n")
+    data = None
+    status = 0
+    last_index = len(stages) - 1
+    for index, stage in enumerate(stages):
+        last = index == last_index
+        if isinstance(stage, tuple) and stage:
+            kind = stage[0]
+            if kind == "echo":
+                data = _pipeline_echo(stage)
+                status = 0
+            elif kind == "grep":
+                source = data if data is not None else _pipeline_read_stdin()
+                data, status = _pipeline_grep(source, stage[1])
+            elif kind == "wc":
+                source = data if data is not None else _pipeline_read_stdin()
+                data, status = _pipeline_wc(source, stage[1])
+            else:  # pragma: no cover - 代码生成器只会产生已知类型
+                _sys.stderr.write(f"transpiler: unknown pipeline stage {kind!r}\n")
                 return 127
-            except OSError as error:
-                _sys.stderr.write(f"{argv[0]}: {error}\n")
-                return 126
-            if previous is not None and previous.stdout is not None:
-                previous.stdout.close()
-            processes.append(process)
-            previous = process
-    finally:
-        pass
-    return previous.wait()
+            if last:
+                _write(data)
+                return status
+        else:
+            status, output = _pipeline_external(stage, data, not last)
+            if last:
+                return status
+            data = output
+    return status
 
 
 def _env(pairs):

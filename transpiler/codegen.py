@@ -599,8 +599,17 @@ class CodeGenerator:
                 arguments = self._argv_expr(command.words[1 + consumed :])
                 stages.append(f"('echo', {arguments}, {newline!r}, {escapes!r})")
                 continue
+            # grep/wc 在这里被截获成纯 Python 阶段，不依赖系统命令。
+            if name == "grep":
+                stages.append(f"('grep', {self._argv_expr(command.words[1:])})")
+                continue
+            if name == "wc":
+                stages.append(f"('wc', {self._argv_expr(command.words[1:])})")
+                continue
             if name in _BUILTINS:
-                raise self._error_for("builtins inside pipelines are not supported in v2", command)
+                raise self._error_for(
+                    "only echo/grep/wc builtins are supported in pipelines", command
+                )
             stages.append(self._argv_expr(command.words))
         return f"_pipeline([{', '.join(stages)}])"
 

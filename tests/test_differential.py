@@ -71,6 +71,8 @@ CASES = [
         {"files": {"input.txt": "alpha\nbeta\n"}},
         id="compound-redirection",
     ),
+    pytest.param('echo "a\\nb\\nc" | grep b', {}, id="python-grep-pipeline"),
+    pytest.param('echo "a\\nb\\nc" | wc -l', {}, id="python-wc-pipeline"),
 ]
 
 

@@ -95,7 +95,7 @@ dependency is needed by the transpiler or by generated programs.
 | `case` | patterns with `\|` alternation, `*` globs, `*)` default, optional final `;;` |
 | Test expressions | `[ ... ]` and `test ...`: `-e -f -d -r -w -x -s -L -h -b -c -p -S -g -u -k -O -G -t -z -n`, `= == != < >`, `-eq -ne -lt -le -gt -ge`, `-a -o ! ( ... )` |
 | Lists / operators | `;`, newline, `&&`, `\|\|`, `\|` pipelines |
-| Pipelines | external commands and builtin `echo` (`echo hi \| grep h`); status is the last command's status |
+| Pipelines | external commands plus pure-Python builtins `echo`, `grep` (`-i/-v/-c/-n/-q/-F`) and `wc` (`-l/-w/-c`); status is the last command's status |
 | Redirection | `<`, `>`, `>>`, `1>`, `1>>`, `2>`, `2>>`, `&>`, `&>>`, `2>&1`, `1>&2` on simple commands; input redirection on compound commands (`while read ...; do ...; done < file`) |
 | Error reporting | typed `LexError` / `ParseError` / `CodegenError` with filename, line and column; no partial output |
 
@@ -109,9 +109,11 @@ The transpiler is honest about being a subset. These are known differences:
    `TranspileError` instead of producing broken Python.
 2. **Command substitution** supports one simple command (no compound body, assignments or
    redirections inside `$(...)`).
-3. **Pipelines** support external commands and builtin `echo`; other builtins (`cd`,
-   `read`, `exit`, …) inside a pipeline are rejected. Per-stage redirections in a pipeline
-   are not supported.
+3. **Pipelines** support external commands plus builtin `echo`, `grep` and `wc`; other
+   builtins (`cd`, `read`, `exit`, …) inside a pipeline are rejected. Per-stage
+   redirections in a pipeline are not supported. `grep`/`wc` are implemented in Python
+   (regex syntax is Python's, a close approximation of POSIX BRE) and do not spawn
+   external processes.
 4. **Output redirection on compound commands** (`if ... fi > log`) is not supported;
    input redirection on compound commands is supported (`while read line; do ...; done < file`).
    Attach other redirections to simple commands instead.
@@ -153,7 +155,7 @@ produce false failures. On Linux they compare stdout and exit status against
 Latest local run (Windows):
 
 ```
-284 passed, 21 skipped
+297 passed, 23 skipped
 ```
 
 The 21 skips are exactly the differential tests; on Linux the same suite runs them too.
